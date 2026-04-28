@@ -33,3 +33,7 @@ nthlayer-bench --core-url http://localhost:8000
 - `httpx>=0.27` — HTTP client for core API
 
 Dev: `pytest>=8.2`, `pytest-asyncio>=0.23`, `ruff>=0.8`
+
+## Documentation
+
+- `README.md` — added 2026-04-28; project-level overview for GitHub and contributors
