@@ -23,6 +23,13 @@ from nthlayer_bench.sre.case_bench import (
     fetch_case_bench,
     render_case_bench,
 )
+from nthlayer_bench.sre.reasoning_capture import (
+    DEFAULT_AUTHOR,
+    OperatorNote,
+    ReasoningCaptureError,
+    fetch_operator_notes,
+    submit_operator_note,
+)
 from nthlayer_bench.sre.post_incident import (
     PostIncidentError,
     PostIncidentReview,
@@ -73,4 +80,10 @@ __all__ = [
     "SituationBoardView",
     "fetch_situation_board",
     "render_situation_board",
+    # reasoning capture
+    "DEFAULT_AUTHOR",
+    "OperatorNote",
+    "ReasoningCaptureError",
+    "fetch_operator_notes",
+    "submit_operator_note",
 ]

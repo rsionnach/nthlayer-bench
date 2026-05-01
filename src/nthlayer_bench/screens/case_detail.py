@@ -1,8 +1,15 @@
 """Case detail screen — operator's working view of a single case.
 
-Mounts the structured paging brief in the right pane and reserves a
-left pane for case context (priority, lease, age, related verdicts).
-Reasoning capture lands here in a follow-up under opensrm-81rn.4.
+Two-pane layout:
+
+- **Left context pane (36 cols)** — case ID and the live reasoning
+  capture panel (operator notes feed + input).
+- **Right pane (1fr)** — the paging brief (severity, summary, likely
+  cause, blast radius, recommended action) with state-aware refresh.
+
+Reachable directly via ``--case-id`` (BenchApp pushes this screen on
+mount) or by selecting a case in the case bench. Press ``r`` for the
+post-incident review; ``escape`` returns to the previous screen.
 """
 from __future__ import annotations
 
@@ -15,6 +22,7 @@ from textual.widgets import Footer, Header, Static
 from nthlayer_common.api_client import CoreAPIClient
 
 from nthlayer_bench.widgets.case_brief import CaseBriefPanel
+from nthlayer_bench.widgets.reasoning_capture import ReasoningCapturePanel
 
 
 class CaseDetailScreen(Screen):
@@ -77,13 +85,6 @@ class CaseDetailScreen(Screen):
             with Vertical(id="context-pane"):
                 yield Static("Case Context", id="context-title", markup=False)
                 yield Static(f"ID: {self._case_id}", id="context-id", markup=False)
-                # Reasoning capture lands here under a future commit on
-                # opensrm-81rn.4. Intentionally absent in this bead — the
-                # spec scopes reasoning capture as a separate widget.
-                yield Static(
-                    "Reasoning capture: coming in a follow-up (opensrm-81rn.4).",
-                    id="context-reasoning-placeholder",
-                    markup=False,
-                )
+                yield ReasoningCapturePanel(self._client, self._case_id)
             yield CaseBriefPanel(self._client, self._case_id)
         yield Footer()

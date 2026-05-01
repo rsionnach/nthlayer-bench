@@ -156,10 +156,12 @@ async def test_case_detail_screen_push_pop_push_reuses_app_client():
 
 
 @pytest.mark.asyncio
-async def test_case_detail_screen_reasoning_capture_is_placeholder():
-    """Reasoning capture is a future widget under opensrm-81rn.4. The
-    placeholder is intentional and stable — pin it so the missing widget
-    is visible to anyone reading the screen, not silently absent."""
+async def test_case_detail_screen_mounts_reasoning_capture_panel():
+    """Bead 7: the reasoning-capture placeholder Static was replaced by
+    a live ReasoningCapturePanel. Pin that the panel mounts in the left
+    context pane and is wired to the same case_id as the brief panel."""
+    from nthlayer_bench.widgets.reasoning_capture import ReasoningCapturePanel
+
     client = AsyncMock()
     screen = CaseDetailScreen(client, "case-123")
     app = _Harness(screen)
@@ -167,13 +169,16 @@ async def test_case_detail_screen_reasoning_capture_is_placeholder():
     with patch(
         "nthlayer_bench.widgets.case_brief.build_paging_brief",
         new=AsyncMock(return_value=_make_brief()),
+    ), patch(
+        # ReasoningCapturePanel polls fetch_operator_notes on mount;
+        # patch with an empty list so the test doesn't depend on a
+        # live core.
+        "nthlayer_bench.widgets.reasoning_capture.fetch_operator_notes",
+        new=AsyncMock(return_value=[]),
     ):
         async with app.run_test() as pilot:
             await pilot.pause()
             await pilot.pause()
-            placeholder = screen.query_one(
-                "#context-reasoning-placeholder", Static
-            )
-            text = str(placeholder.content)
-            assert "Reasoning capture" in text
-            assert "follow-up" in text
+            panels = list(screen.query(ReasoningCapturePanel))
+            assert len(panels) == 1
+            assert panels[0]._case_id == "case-123"
