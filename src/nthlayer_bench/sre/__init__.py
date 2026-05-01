@@ -15,6 +15,12 @@ from nthlayer_bench.sre.brief import (
     build_paging_brief,
     render_brief,
 )
+from nthlayer_bench.sre.escalation import (
+    DEFAULT_POLL_LIMIT,
+    ESCALATION_SEVERITIES,
+    EscalationEvent,
+    EscalationMonitor,
+)
 from nthlayer_bench.sre.case_bench import (
     PRIORITY_ORDER,
     CaseBenchError,
@@ -86,4 +92,9 @@ __all__ = [
     "ReasoningCaptureError",
     "fetch_operator_notes",
     "submit_operator_note",
+    # escalation
+    "DEFAULT_POLL_LIMIT",
+    "ESCALATION_SEVERITIES",
+    "EscalationEvent",
+    "EscalationMonitor",
 ]

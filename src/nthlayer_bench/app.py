@@ -7,12 +7,30 @@ and case detail screens (Phase 4).
 
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.widgets import Footer, Header, Static
 
 from nthlayer_common.api_client import CoreAPIClient
+
+from nthlayer_bench.sre.escalation import EscalationEvent, EscalationMonitor
+
+# Notification poller cadence — the operator gets a toast within ~5s of
+# a high/critical breach landing on core. Matches the brief/review/bench
+# panel cadence so all bench polling is on a single tick budget.
+ESCALATION_POLL_SECONDS = 5.0
+
+# Map breach severity to Textual's toast severity (which controls
+# colour/persistence). Hoisted to module scope so the mapping is
+# greppable in one place — same idiom as the other module-level
+# tables in the bench (PRIORITY_ORDER, _CAUSE_PLACEHOLDER, etc).
+_SEVERITY_TO_TEXTUAL: dict[str, str] = {
+    "critical": "error",     # red, persistent
+    "high": "warning",       # orange
+}
 
 
 class ConnectionStatus(Static):
@@ -83,6 +101,16 @@ class BenchApp(App):
         # CoreAPIClient is async-managed; instantiated lazily so screens
         # share a single client instance per app run.
         self._client: CoreAPIClient | None = None
+        # Escalation monitor is one-per-session. Owned by the app rather
+        # than a screen so the toast surface is reachable from anywhere
+        # the operator navigates.
+        self._escalation_monitor = EscalationMonitor()
+        # Skip-if-locked guard against reentrant polling — same idiom
+        # as the panel widgets (CaseBenchPanel, SituationBoardPanel,
+        # etc.). On a slow core, the 5s tick can fire while a previous
+        # poll is still awaiting; without the lock both would observe
+        # the same _seen_ids snapshot and dispatch the same toast twice.
+        self._escalation_lock = asyncio.Lock()
 
     @property
     def client(self) -> CoreAPIClient:
@@ -140,6 +168,48 @@ class BenchApp(App):
         from nthlayer_bench.screens.case_bench import CaseBenchScreen
         self.push_screen(CaseBenchScreen(self.client))
 
+        # Start the escalation poller. Toasts surface across any screen
+        # the operator is on (bench, situation board, case detail,
+        # review) — Textual's notify renders at app level, not per-screen.
+        self.set_interval(ESCALATION_POLL_SECONDS, self._poll_escalations)
+        self.call_later(self._poll_escalations)
+
         if self._initial_case_id is not None:
             from nthlayer_bench.screens.case_detail import CaseDetailScreen
             self.push_screen(CaseDetailScreen(self.client, self._initial_case_id))
+
+    async def _poll_escalations(self) -> None:
+        """Run one escalation poll and dispatch toasts for new events.
+
+        Skip-if-locked guard: a slow core could let the 5s interval
+        fire while a previous poll is still in flight. Both polls
+        would see the same `_seen_ids` snapshot and dispatch the same
+        toast twice. Bail early if another poll holds the lock; the
+        next clean tick will pick up newer data.
+        """
+        if self._escalation_lock.locked():
+            return
+        async with self._escalation_lock:
+            events = await self._escalation_monitor.poll(self.client)
+            for event in events:
+                self._notify_escalation(event)
+
+    def _notify_escalation(self, event: EscalationEvent) -> None:
+        """Render a single escalation event as a Textual toast.
+
+        Title carries service + severity; message carries the verdict
+        summary so the operator can decide whether to navigate without
+        opening the case. Severity → toast colour mapping lives in
+        ``_SEVERITY_TO_TEXTUAL`` at module scope.
+        """
+        toast_severity = _SEVERITY_TO_TEXTUAL.get(event.severity, "information")
+        title = f"{event.severity.upper()}: {event.service}"
+        # markup=False on the message — verdict summaries embed text from
+        # LLM agents and external systems; Rich-markup parsing on those
+        # would let stray brackets reformat the toast.
+        self.notify(
+            event.summary or "(no summary)",
+            title=title,
+            severity=toast_severity,
+            markup=False,
+        )

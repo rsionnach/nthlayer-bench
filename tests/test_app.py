@@ -193,6 +193,162 @@ class TestBenchApp:
                 await pilot.pause()
                 assert isinstance(app.screen, CaseBenchScreen)
 
+    async def test_app_dispatches_toast_on_new_escalation(self):
+        """When EscalationMonitor.poll yields a new event, BenchApp's
+        notify is called with severity-mapped Textual toast colour and
+        markup-disabled message body."""
+        from nthlayer_bench.sre.escalation import EscalationEvent
+
+        app = BenchApp(core_url="http://test:8000")
+        # Pre-mark baseline as done so the first poll's events fire.
+        app._escalation_monitor._baseline_done = True
+
+        events = [
+            EscalationEvent(
+                verdict_id="vrd-1",
+                service="fraud-detect",
+                severity="critical",
+                summary="reversal rate at 8%",
+                created_at="2026-04-30T10:25:00Z",
+            )
+        ]
+
+        notify_calls = []
+
+        def fake_notify(message, *, title=None, severity=None, markup=None, **kwargs):
+            notify_calls.append({
+                "message": message, "title": title,
+                "severity": severity, "markup": markup,
+            })
+
+        with _empty_case_bench(), patch.object(
+            app._escalation_monitor, "poll",
+            new=AsyncMock(return_value=events),
+        ):
+            async with app.run_test() as pilot:
+                with patch.object(app, "notify", side_effect=fake_notify):
+                    await app._poll_escalations()
+                await pilot.pause()
+
+        assert len(notify_calls) == 1
+        call = notify_calls[0]
+        assert "reversal rate at 8%" in call["message"]
+        assert "CRITICAL" in (call["title"] or "")
+        assert "fraud-detect" in (call["title"] or "")
+        assert call["severity"] == "error"  # critical → error (red)
+        assert call["markup"] is False
+
+    async def test_app_dispatches_warning_severity_for_high_breaches(self):
+        """High-severity breaches map to Textual's 'warning' (orange)
+        rather than 'error' (red) so the operator can distinguish
+        critical from high at a glance."""
+        from nthlayer_bench.sre.escalation import EscalationEvent
+
+        app = BenchApp(core_url="http://test:8000")
+        app._escalation_monitor._baseline_done = True
+
+        events = [
+            EscalationEvent(
+                verdict_id="vrd-2",
+                service="fraud-detect",
+                severity="high",
+                summary="latency drift",
+                created_at="2026-04-30T10:25:00Z",
+            )
+        ]
+
+        notify_calls = []
+
+        def fake_notify(message, *, title=None, severity=None, markup=None, **kwargs):
+            notify_calls.append({"severity": severity, "title": title})
+
+        with _empty_case_bench(), patch.object(
+            app._escalation_monitor, "poll",
+            new=AsyncMock(return_value=events),
+        ):
+            async with app.run_test() as pilot:
+                with patch.object(app, "notify", side_effect=fake_notify):
+                    await app._poll_escalations()
+                await pilot.pause()
+
+        assert notify_calls[0]["severity"] == "warning"
+        assert "HIGH" in notify_calls[0]["title"]
+
+    async def test_app_concurrent_polls_dispatch_toast_only_once(self):
+        """Skip-if-locked guard: if the 5s tick fires while a previous
+        poll is still in flight (slow core), the second invocation
+        must not run — otherwise both would observe the same
+        ``_seen_ids`` snapshot and dispatch the same toast twice.
+
+        Tested at the lock-semantics level — exercises ``_poll_escalations``
+        directly without mounting the full Textual app, since the
+        invariant being asserted is about the BenchApp's own lock and
+        notify dispatch, not about screen rendering."""
+        import asyncio
+
+        from nthlayer_bench.sre.escalation import EscalationEvent
+
+        app = BenchApp(core_url="http://test:8000")
+        app._escalation_monitor._baseline_done = True
+
+        gate = asyncio.Event()
+        call_count = {"polls": 0}
+
+        async def slow_poll(client):
+            call_count["polls"] += 1
+            await gate.wait()
+            return [
+                EscalationEvent(
+                    verdict_id="vrd-X",
+                    service="fraud-detect",
+                    severity="critical",
+                    summary="x",
+                    created_at="2026-04-30T10:00:00Z",
+                )
+            ]
+
+        notify_calls = []
+
+        def fake_notify(*args, **kwargs):
+            notify_calls.append(args)
+
+        app._escalation_monitor.poll = slow_poll  # type: ignore[method-assign]
+        app.notify = fake_notify  # type: ignore[method-assign]
+
+        first = asyncio.create_task(app._poll_escalations())
+        await asyncio.sleep(0)  # let `first` enter and acquire the lock
+        # Second invocation arrives while first is parked on gate → bails
+        # via the locked guard without calling poll.
+        await app._poll_escalations()
+        assert call_count["polls"] == 1, "Second poll must not invoke poll()"
+
+        gate.set()
+        await first
+
+        # Despite two scheduled polls, only one toast was dispatched.
+        assert len(notify_calls) == 1
+
+    async def test_app_skips_notification_when_no_new_events(self):
+        """No-op cycle: poll returns empty list → no notify calls. The
+        toast surface stays quiet so operators only hear about real
+        new events."""
+        app = BenchApp(core_url="http://test:8000")
+        notify_calls = []
+
+        def fake_notify(*args, **kwargs):
+            notify_calls.append(args)
+
+        with _empty_case_bench(), patch.object(
+            app._escalation_monitor, "poll",
+            new=AsyncMock(return_value=[]),
+        ):
+            async with app.run_test() as pilot:
+                with patch.object(app, "notify", side_effect=fake_notify):
+                    await app._poll_escalations()
+                await pilot.pause()
+
+        assert notify_calls == []
+
     async def test_deep_link_pop_returns_to_case_bench(self):
         """Launch with --case-id (deep-link from a paging URL), pop the
         case-detail screen → operator lands on the case bench, not the
