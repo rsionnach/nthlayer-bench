@@ -9,5 +9,11 @@ easy to find.
 from nthlayer_bench.screens.case_bench import CaseBenchScreen
 from nthlayer_bench.screens.case_detail import CaseDetailScreen
 from nthlayer_bench.screens.case_review import CaseReviewScreen
+from nthlayer_bench.screens.situation_board import SituationBoardScreen
 
-__all__ = ["CaseBenchScreen", "CaseDetailScreen", "CaseReviewScreen"]
+__all__ = [
+    "CaseBenchScreen",
+    "CaseDetailScreen",
+    "CaseReviewScreen",
+    "SituationBoardScreen",
+]

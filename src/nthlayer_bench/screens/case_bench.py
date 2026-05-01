@@ -8,6 +8,7 @@ open the post-incident review with ``r``.
 from __future__ import annotations
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Footer, Header
 
@@ -19,12 +20,14 @@ from nthlayer_bench.widgets.case_bench import CaseBenchPanel
 class CaseBenchScreen(Screen):
     """Operator queue: priority-grouped list of active cases."""
 
-    # No screen-level bindings: the bench is the home view, so the
-    # app-level "q → quit" binding (BenchApp.BINDINGS) is what the
-    # operator should hit. A screen-level "q → pop_screen" would pop
-    # the home view to the empty-app default Static, which isn't a
-    # useful destination.
-    BINDINGS: list = []
+    # The bench is the home view — no "q → pop_screen" binding (that
+    # would land the operator on the empty-app Static). The app-level
+    # "q → quit" binding is what 'q' should do here. The 's' binding
+    # pushes the situation board (system dashboard); operator pops back
+    # to the bench from there with escape.
+    BINDINGS = [
+        Binding("s", "open_situation_board", "Situation board"),
+    ]
 
     def __init__(self, client: CoreAPIClient) -> None:
         """``client`` is the app-shared :class:`CoreAPIClient` (from
@@ -57,3 +60,12 @@ class CaseBenchScreen(Screen):
         if isinstance(top, CaseDetailScreen) and top.case_id == case_id:
             return
         self.app.push_screen(CaseDetailScreen(self._client, case_id))
+
+    def action_open_situation_board(self) -> None:
+        """Push the situation-board screen on top of the bench."""
+        # Deferred import: same rationale as the case-detail push from
+        # the bench panel — keeps screens/ off the import path for
+        # headless app construction and avoids future bench↔dashboard
+        # cycles.
+        from nthlayer_bench.screens.situation_board import SituationBoardScreen
+        self.app.push_screen(SituationBoardScreen(self._client))

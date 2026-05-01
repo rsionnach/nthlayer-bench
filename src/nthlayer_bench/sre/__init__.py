@@ -32,6 +32,14 @@ from nthlayer_bench.sre.post_incident import (
     build_post_incident_review,
     render_post_incident_review,
 )
+from nthlayer_bench.sre.situation_board import (
+    BreachEvent,
+    PortfolioSnapshot,
+    SituationBoardError,
+    SituationBoardView,
+    fetch_situation_board,
+    render_situation_board,
+)
 
 __all__ = [
     # brief
@@ -58,4 +66,11 @@ __all__ = [
     "VerdictAccuracy",
     "build_post_incident_review",
     "render_post_incident_review",
+    # situation board
+    "BreachEvent",
+    "PortfolioSnapshot",
+    "SituationBoardError",
+    "SituationBoardView",
+    "fetch_situation_board",
+    "render_situation_board",
 ]
