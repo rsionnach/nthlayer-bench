@@ -37,8 +37,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from nthlayer_common.api_client import CoreAPIClient
-from nthlayer_common.verdicts import create as verdict_create
+from nthlayer_common.api_client import APIResult, CoreAPIClient
+from nthlayer_common.verdicts import Verdict, create as verdict_create
 from nthlayer_common.verdicts.serialise import to_dict
 
 from nthlayer_bench.sre.brief import (
@@ -72,9 +72,23 @@ __all__ = [
     "AnchorVerdictMissingError",
     "CaseNotFoundError",
     "CoreUnreachableError",
+    "fetch_case",
     "fetch_operator_notes",
     "submit_operator_note",
+    "build_operator_note_verdict",
+    "submit_operator_note_verdict",
+    "operator_note_from_verdict",
 ]
+
+
+async def fetch_case(client: CoreAPIClient, case_id: str) -> dict:
+    """Fetch a case dict from core.
+
+    Public companion to :func:`fetch_operator_notes` so callers (e.g.
+    the reasoning-capture panel) can cache the case for offline-submit
+    via the write queue without piggy-backing on a private helper.
+    """
+    return await _get_case(client, case_id)
 
 
 # ------------------------------------------------------------------ #
@@ -137,33 +151,39 @@ def _to_operator_note(verdict: dict, case_id: str) -> OperatorNote:
 DEFAULT_AUTHOR = "operator"
 
 
-async def submit_operator_note(
-    client: CoreAPIClient,
-    case_id: str,
+def build_operator_note_verdict(
+    case: dict,
     text: str,
     *,
     author: str = DEFAULT_AUTHOR,
-) -> OperatorNote:
-    """Submit an operator note to core, attached to the given case.
+) -> Verdict:
+    """Construct an ``operator_note`` verdict for a given case dict.
 
-    Empty or whitespace-only ``text`` raises :class:`ValueError` —
-    callers should guard at the input layer. The submitted verdict
-    carries the full text in ``judgment.reasoning`` and a truncated
-    summary in ``subject.summary`` so the operator's wording survives
-    intact for the audit trail.
+    Pure: no I/O. Generates a stable verdict ID at construction time so
+    a queued retry under a write queue (Bead 9b) re-submits the SAME
+    ID core saw on the first attempt — letting core return 409 on the
+    duplicate and the queue drop the entry as already-accepted.
+
+    Used by both the synchronous :func:`submit_operator_note` (which
+    fetches the case first) and the write queue (which builds verdicts
+    eagerly from the panel's cached case data).
+
+    Raises :class:`ValueError` for empty/whitespace text and
+    :class:`AnchorVerdictMissingError` when the case lacks
+    ``underlying_verdict``.
     """
     stripped = text.strip()
     if not stripped:
         raise ValueError("operator note text must not be empty")
 
-    # Normalise author at the boundary: empty/whitespace falls back to
-    # DEFAULT_AUTHOR. Without this, submit would write "" while the
-    # fetch path's `_to_operator_note` normalises empty → "unknown" —
+    # Normalise author at the build boundary: empty/whitespace falls
+    # back to DEFAULT_AUTHOR. Without this, submit would write "" while
+    # the fetch path's _to_operator_note normalises empty → "unknown" —
     # the same row would have two different author values across
     # submit-then-fetch round trips.
     normalised_author = author.strip() or DEFAULT_AUTHOR
 
-    case = await _get_case(client, case_id)
+    case_id = case.get("id", "")
     anchor_id = _require_anchor_id(case, case_id)
     service = case.get("service") or "unknown"
 
@@ -184,18 +204,65 @@ async def submit_operator_note(
     verdict.parent_ids = [anchor_id]
     verdict.verdict_type = "operator_note"
     verdict.service = service
+    return verdict
 
-    payload = to_dict(verdict)
-    result = await client.submit_verdict(payload)
+
+async def submit_operator_note_verdict(
+    client: CoreAPIClient, verdict: Verdict
+) -> APIResult:
+    """Submit a pre-built operator-note verdict to core.
+
+    Returns the raw :class:`APIResult` so callers can branch on
+    ``status_code == 409`` (already accepted, drop from queue),
+    ``status_code == 0`` (connection failed, keep queued), or other
+    non-2xx (treated as transient by the queue today; downstream may
+    later distinguish 4xx-permanent from 5xx-transient if operator
+    feedback warrants).
+    """
+    return await client.submit_verdict(to_dict(verdict))
+
+
+def operator_note_from_verdict(verdict: Verdict, case_id: str) -> OperatorNote:
+    """Project a built/submitted Verdict back into an OperatorNote for
+    immediate UI rendering. Used after a successful submit and after
+    a successful queued-write replay."""
+    custom = verdict.metadata.custom if verdict.metadata else {}
+    author = custom.get("author") if isinstance(custom, dict) else None
+    return OperatorNote(
+        verdict_id=verdict.id,
+        case_id=case_id,
+        author=author if isinstance(author, str) and author else DEFAULT_AUTHOR,
+        text=verdict.judgment.reasoning,
+        created_at=verdict.timestamp.isoformat(),
+    )
+
+
+async def submit_operator_note(
+    client: CoreAPIClient,
+    case_id: str,
+    text: str,
+    *,
+    author: str = DEFAULT_AUTHOR,
+) -> OperatorNote:
+    """High-level write path: fetch the case, build the verdict,
+    submit it, and project the result into an :class:`OperatorNote`.
+
+    Empty or whitespace-only ``text`` raises :class:`ValueError` —
+    callers should guard at the input layer. The submitted verdict
+    carries the full text in ``judgment.reasoning`` and a truncated
+    summary in ``subject.summary`` so the operator's wording survives
+    intact for the audit trail.
+
+    For the queue-friendly two-phase variant (fetch case once, build
+    eagerly, submit later), use :func:`build_operator_note_verdict`
+    + :func:`submit_operator_note_verdict` directly.
+    """
+    case = await _get_case(client, case_id)
+    verdict = build_operator_note_verdict(case, text, author=author)
+    result = await submit_operator_note_verdict(client, verdict)
 
     if result.ok:
-        return OperatorNote(
-            verdict_id=verdict.id,
-            case_id=case_id,
-            author=normalised_author,
-            text=stripped,
-            created_at=verdict.timestamp.isoformat(),
-        )
+        return operator_note_from_verdict(verdict, case_id)
     if result.status_code == 0:
         raise CoreUnreachableError(result.detail or {"error": result.error})
     raise ReasoningCaptureError(

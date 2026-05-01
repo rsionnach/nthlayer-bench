@@ -85,6 +85,13 @@ class CaseDetailScreen(Screen):
             with Vertical(id="context-pane"):
                 yield Static("Case Context", id="context-title", markup=False)
                 yield Static(f"ID: {self._case_id}", id="context-id", markup=False)
-                yield ReasoningCapturePanel(self._client, self._case_id)
+                # Pass the app-shared write queue so the panel can
+                # enqueue offline-typed notes (Bead 9b). Falls back to
+                # legacy "keep input on error" behaviour if the app
+                # doesn't expose one.
+                write_queue = getattr(self.app, "write_queue", None)
+                yield ReasoningCapturePanel(
+                    self._client, self._case_id, write_queue=write_queue
+                )
             yield CaseBriefPanel(self._client, self._case_id)
         yield Footer()

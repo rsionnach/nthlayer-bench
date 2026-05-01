@@ -25,9 +25,12 @@ from nthlayer_bench.sre.reasoning_capture import (
     DEFAULT_AUTHOR,
     OperatorNote,
     ReasoningCaptureError,
+    build_operator_note_verdict,
+    fetch_case,
     fetch_operator_notes,
     submit_operator_note,
 )
+from nthlayer_bench.sre.write_queue import WriteQueue
 
 REFRESH_SECONDS = 5.0
 
@@ -65,6 +68,7 @@ class ReasoningCapturePanel(Vertical):
         *,
         author: str = DEFAULT_AUTHOR,
         refresh_seconds: float = REFRESH_SECONDS,
+        write_queue: WriteQueue | None = None,
     ) -> None:
         super().__init__()
         self._client = client
@@ -76,6 +80,16 @@ class ReasoningCapturePanel(Vertical):
         # In-flight write guard: operator double-clicking the submit
         # binding must not trigger two POSTs for the same text.
         self._submit_in_flight = False
+        # Most-recent successful case fetch. Cached so the panel can
+        # build operator-note verdicts for the offline write queue
+        # without a fresh fetch (which would itself fail when core is
+        # the reason we're queuing). None until the first successful
+        # refresh — first-submit-before-first-refresh falls back to
+        # the live submit_operator_note path.
+        self._cached_case: dict | None = None
+        # Optional app-shared write queue. When None, submit failures
+        # surface inline errors only (legacy Bead 7 behaviour).
+        self._write_queue = write_queue
 
     def compose(self) -> ComposeResult:
         yield Static("Reasoning", id="notes-title", markup=False)
@@ -103,6 +117,11 @@ class ReasoningCapturePanel(Vertical):
 
     async def _do_refresh(self) -> None:
         try:
+            # Fetch case + notes together. The case dict is cached for
+            # the offline write-queue path; if core goes down between
+            # this refresh and the next submit, the panel can still
+            # build a valid operator-note verdict from the cache.
+            case = await fetch_case(self._client, self._case_id)
             notes = await fetch_operator_notes(self._client, self._case_id)
         except CaseNotFoundError:
             self._render_error(f"Case {self._case_id!r} not found.")
@@ -118,7 +137,9 @@ class ReasoningCapturePanel(Vertical):
         except ReasoningCaptureError as exc:
             self._render_error(f"Notes unavailable: {exc}")
             return
+        self._cached_case = case
         await self._render_notes(notes)
+        self._refresh_pending_status()
 
     async def _render_notes(self, notes: list[OperatorNote]) -> None:
         self.query_one("#error", Static).update("")
@@ -180,10 +201,16 @@ class ReasoningCapturePanel(Vertical):
                 status.update("")
                 return
             except CoreUnreachableError:
-                error.update(
-                    "Submit failed: core unreachable. Note kept — try again."
-                )
-                status.update("")
+                # Bead 9b: instead of leaving the operator to retry by
+                # hand, build the verdict from the cached case and
+                # enqueue. The app-level drain timer will replay it
+                # when core returns.
+                queued = self._enqueue_for_retry(text, error, status)
+                if queued:
+                    input_widget.value = ""
+                    self._refresh_pending_status()
+                # If we couldn't queue (no cached case yet), the inline
+                # error above stays; operator can retry manually.
                 return
             except ReasoningCaptureError as exc:
                 error.update(f"Submit failed: {exc}. Note kept — try again.")
@@ -203,6 +230,62 @@ class ReasoningCapturePanel(Vertical):
             self._submit_in_flight = False
         if success:
             await self._refresh()
+
+    def _enqueue_for_retry(
+        self, text: str, error: Static, status: Static
+    ) -> bool:
+        """Build a verdict from the cached case and enqueue it on the
+        app's write queue. Returns True if queued, False if the panel
+        couldn't build (no cached case yet, or build raised).
+        """
+        if self._write_queue is None or self._cached_case is None:
+            error.update(
+                "Submit failed: core unreachable. Note kept — try again."
+            )
+            status.update("")
+            return False
+        try:
+            verdict = build_operator_note_verdict(
+                self._cached_case, text, author=self._author
+            )
+        except (ValueError, AnchorVerdictMissingError) as exc:
+            error.update(f"Submit failed: {exc}")
+            status.update("")
+            return False
+        self._write_queue.enqueue(verdict, self._case_id)
+        # Status update is delegated to _refresh_pending_status() — the
+        # caller (_do_submit) invokes it after this returns True. That
+        # keeps "Pending submission(s): N" the single source of operator-
+        # visible queue state; we don't write a competing message here.
+        error.update("")
+        return True
+
+    def _refresh_pending_status(self) -> None:
+        """Update the status line with the current queued-write count.
+
+        Called after each refresh and each successful enqueue. When the
+        queue is empty (drain succeeded or no queue configured), status
+        clears. Operator sees a live "N pending" counter so they know
+        not to manually retype a note that's already queued.
+        """
+        if self._write_queue is None:
+            return
+        pending = len(self._write_queue)
+        status = self.query_one("#status", Static)
+        if pending == 0:
+            # Only clear when the current message was set by *this*
+            # method (i.e. starts with "Pending"). Other writers may
+            # have set a transient status like "Submitting…" that we
+            # shouldn't wipe — they own their own clear-on-completion.
+            # Coupled to the invariant that all writers in this widget
+            # call status.update() with plain strings (no Rich
+            # renderables), so str(content) round-trips reliably.
+            current = str(status.content)
+            if current.startswith("Pending"):
+                status.update("")
+        else:
+            plural = "s" if pending != 1 else ""
+            status.update(f"Pending submission{plural}: {pending}")
 
 
 def _format_note_line(note: OperatorNote) -> str:

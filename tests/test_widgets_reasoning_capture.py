@@ -289,6 +289,161 @@ async def test_widget_renders_inline_error_for_core_unreachable():
 # Lifecycle                                                            #
 # ------------------------------------------------------------------ #
 
+# ------------------------------------------------------------------ #
+# Bead 9b: write-queue integration                                     #
+# ------------------------------------------------------------------ #
+
+@pytest.mark.asyncio
+async def test_widget_enqueues_note_when_core_unreachable_during_submit():
+    """Bead 9b: instead of leaving the operator to retry by hand on
+    core-unreachable, the panel builds a verdict from the cached case
+    and enqueues it on the app's write queue."""
+    from nthlayer_bench.sre.reasoning_capture import CoreUnreachableError
+    from nthlayer_bench.sre.write_queue import WriteQueue
+
+    queue = WriteQueue()
+    panel = ReasoningCapturePanel(
+        AsyncMock(), "case-123", author="alice", write_queue=queue,
+    )
+    app = _Harness(panel)
+
+    case = {
+        "id": "case-123",
+        "service": "fraud-detect",
+        "underlying_verdict": "vrd-anchor-001",
+        "state": "pending",
+        "priority": "P1",
+    }
+
+    with patch(
+        "nthlayer_bench.widgets.reasoning_capture.fetch_case",
+        new=AsyncMock(return_value=case),
+    ), patch(
+        "nthlayer_bench.widgets.reasoning_capture.fetch_operator_notes",
+        new=AsyncMock(return_value=[]),
+    ), patch(
+        "nthlayer_bench.widgets.reasoning_capture.submit_operator_note",
+        new=AsyncMock(side_effect=CoreUnreachableError({"x": "y"})),
+    ):
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.pause()  # first refresh populates _cached_case
+
+            input_widget = panel.query_one("#note-input", Input)
+            input_widget.value = "investigated, looks like the deploy"
+            await input_widget.action_submit()
+            await pilot.pause()
+            await pilot.pause()
+
+            # Note was queued, input cleared.
+            assert len(queue) == 1
+            assert input_widget.value == ""
+            queued = queue.pending()[0]
+            assert queued.case_id == "case-123"
+            assert queued.verdict.judgment.reasoning == (
+                "investigated, looks like the deploy"
+            )
+
+            # Status surfaces the queue depth — operator's at-a-glance
+            # signal that they have outstanding writes.
+            status = str(panel.query_one("#status", Static).content)
+            assert "Pending submission" in status
+            assert "1" in status
+
+
+@pytest.mark.asyncio
+async def test_widget_keeps_input_when_no_cached_case_yet():
+    """Edge: operator submits before the first refresh has populated
+    ``_cached_case``. Without a cached case the panel can't build a
+    verdict offline — fall back to inline error + keep input (legacy
+    Bead 7 behaviour)."""
+    from nthlayer_bench.sre.reasoning_capture import CoreUnreachableError
+    from nthlayer_bench.sre.write_queue import WriteQueue
+
+    queue = WriteQueue()
+    panel = ReasoningCapturePanel(AsyncMock(), "case-123", write_queue=queue)
+    app = _Harness(panel)
+
+    with patch(
+        "nthlayer_bench.widgets.reasoning_capture.fetch_case",
+        new=AsyncMock(side_effect=CoreUnreachableError({"x": "y"})),
+    ), patch(
+        "nthlayer_bench.widgets.reasoning_capture.fetch_operator_notes",
+        new=AsyncMock(side_effect=CoreUnreachableError({"x": "y"})),
+    ), patch(
+        "nthlayer_bench.widgets.reasoning_capture.submit_operator_note",
+        new=AsyncMock(side_effect=CoreUnreachableError({"x": "y"})),
+    ):
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.pause()
+            assert panel._cached_case is None  # refresh failed; no cache
+
+            input_widget = panel.query_one("#note-input", Input)
+            input_widget.value = "first note before any refresh"
+            await input_widget.action_submit()
+            await pilot.pause()
+            await pilot.pause()
+
+            # No queue entry, input kept.
+            assert len(queue) == 0
+            assert input_widget.value == "first note before any refresh"
+            err = str(panel.query_one("#error", Static).content)
+            assert "unreachable" in err.lower()
+
+
+@pytest.mark.asyncio
+async def test_widget_renders_pending_count_in_status():
+    """Operator-visible "Pending submission(s): N" — read on each
+    refresh after an enqueue. Pin the rendering so the operator
+    always knows whether they have outstanding writes."""
+    from nthlayer_bench.sre.reasoning_capture import CoreUnreachableError
+    from nthlayer_bench.sre.write_queue import WriteQueue
+
+    queue = WriteQueue()
+    panel = ReasoningCapturePanel(AsyncMock(), "case-123", write_queue=queue)
+    app = _Harness(panel)
+
+    case = {
+        "id": "case-123",
+        "service": "fraud-detect",
+        "underlying_verdict": "vrd-anchor-001",
+        "state": "pending",
+        "priority": "P1",
+    }
+
+    with patch(
+        "nthlayer_bench.widgets.reasoning_capture.fetch_case",
+        new=AsyncMock(return_value=case),
+    ), patch(
+        "nthlayer_bench.widgets.reasoning_capture.fetch_operator_notes",
+        new=AsyncMock(return_value=[]),
+    ), patch(
+        "nthlayer_bench.widgets.reasoning_capture.submit_operator_note",
+        new=AsyncMock(side_effect=CoreUnreachableError({"x": "y"})),
+    ):
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.pause()
+
+            # Submit two notes — both enqueued (core unreachable).
+            input_widget = panel.query_one("#note-input", Input)
+            input_widget.value = "note 1"
+            await input_widget.action_submit()
+            await pilot.pause()
+            input_widget.value = "note 2"
+            await input_widget.action_submit()
+            await pilot.pause()
+            await pilot.pause()
+
+            assert len(queue) == 2
+            # Trigger a refresh so the pending-status renderer fires.
+            await panel._refresh()
+            await pilot.pause()
+            status = str(panel.query_one("#status", Static).content)
+            assert "Pending submissions: 2" in status
+
+
 @pytest.mark.asyncio
 async def test_widget_skips_reentrant_refresh_when_previous_in_flight():
     panel = ReasoningCapturePanel(AsyncMock(), "case-123")

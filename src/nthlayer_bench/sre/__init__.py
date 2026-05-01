@@ -33,8 +33,17 @@ from nthlayer_bench.sre.reasoning_capture import (
     DEFAULT_AUTHOR,
     OperatorNote,
     ReasoningCaptureError,
+    build_operator_note_verdict,
+    fetch_case,
     fetch_operator_notes,
+    operator_note_from_verdict,
     submit_operator_note,
+    submit_operator_note_verdict,
+)
+from nthlayer_bench.sre.write_queue import (
+    DrainResult,
+    PendingNote,
+    WriteQueue,
 )
 from nthlayer_bench.sre.post_incident import (
     PostIncidentError,
@@ -90,8 +99,16 @@ __all__ = [
     "DEFAULT_AUTHOR",
     "OperatorNote",
     "ReasoningCaptureError",
+    "build_operator_note_verdict",
+    "fetch_case",
     "fetch_operator_notes",
+    "operator_note_from_verdict",
     "submit_operator_note",
+    "submit_operator_note_verdict",
+    # write queue
+    "DrainResult",
+    "PendingNote",
+    "WriteQueue",
     # escalation
     "DEFAULT_POLL_LIMIT",
     "ESCALATION_SEVERITIES",

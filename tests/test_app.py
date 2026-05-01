@@ -5,7 +5,13 @@ import contextlib
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from nthlayer_bench.app import BenchApp, ConnectionStatus
+from nthlayer_bench.app import (
+    BenchApp,
+    ConnectionStatus,
+    RECONNECT_BASE_INTERVAL,
+    RECONNECT_MAX_INTERVAL,
+    _compute_next_interval,
+)
 from nthlayer_bench.sre.case_bench import CaseBenchView
 
 
@@ -43,7 +49,8 @@ class TestConnectionStatus:
         mock_client.get = AsyncMock(return_value=mock_response)
 
         with patch("nthlayer_bench.app.httpx.AsyncClient", return_value=mock_client):
-            await cs._check_health()
+            with patch.object(cs, "set_timer"):
+                await cs._check_health()
 
         assert cs.is_connected
 
@@ -59,7 +66,8 @@ class TestConnectionStatus:
         mock_client.get = AsyncMock(return_value=mock_response)
 
         with patch("nthlayer_bench.app.httpx.AsyncClient", return_value=mock_client):
-            await cs._check_health()
+            with patch.object(cs, "set_timer"):
+                await cs._check_health()
 
         assert not cs.is_connected
 
@@ -73,9 +81,128 @@ class TestConnectionStatus:
         mock_client.get = AsyncMock(side_effect=httpx.ConnectError("refused"))
 
         with patch("nthlayer_bench.app.httpx.AsyncClient", return_value=mock_client):
-            await cs._check_health()
+            with patch.object(cs, "set_timer"):
+                await cs._check_health()
 
         assert not cs.is_connected
+
+
+class TestReconnectBackoff:
+    """Bead 9a: exponential backoff schedule for ConnectionStatus
+    health checks. Tests at the pure-helper level so the full sequence
+    can be asserted without driving Textual on real wall-clock waits."""
+
+    def test_no_failures_returns_base_interval(self):
+        assert _compute_next_interval(0) == RECONNECT_BASE_INTERVAL
+
+    def test_negative_failures_returns_base_interval(self):
+        """Defensive: a negative count (shouldn't happen but defensive)
+        falls back to BASE rather than crashing on a negative power."""
+        assert _compute_next_interval(-1) == RECONNECT_BASE_INTERVAL
+
+    def test_one_failure_doubles_to_ten(self):
+        assert _compute_next_interval(1) == 10.0
+
+    def test_two_failures_doubles_to_twenty(self):
+        assert _compute_next_interval(2) == 20.0
+
+    def test_three_failures_doubles_to_forty(self):
+        assert _compute_next_interval(3) == 40.0
+
+    def test_four_failures_caps_at_max(self):
+        """5 * 2^4 = 80 → clamped to MAX (60)."""
+        assert _compute_next_interval(4) == RECONNECT_MAX_INTERVAL
+
+    def test_high_failure_count_stays_capped(self):
+        """Long core outage (10 consecutive failures) doesn't blow up
+        the interval into hours — caps cleanly at MAX."""
+        assert _compute_next_interval(10) == RECONNECT_MAX_INTERVAL
+
+
+class TestConnectionStatusBackoffState:
+    """Integration of the backoff into ConnectionStatus state."""
+
+    async def test_consecutive_failures_increment_on_connection_error(self):
+        cs = ConnectionStatus("http://test:8000")
+        assert cs._consecutive_failures == 0
+
+        import httpx
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("refused"))
+
+        with patch("nthlayer_bench.app.httpx.AsyncClient", return_value=mock_client):
+            with patch.object(cs, "set_timer"):
+                await cs._check_health()
+                await cs._check_health()
+                await cs._check_health()
+
+        assert cs._consecutive_failures == 3
+
+    async def test_successful_health_check_resets_failures_to_zero(self):
+        cs = ConnectionStatus("http://test:8000")
+        cs._consecutive_failures = 5  # simulate prior outage
+
+        mock_response = AsyncMock()
+        mock_response.status_code = 200
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(return_value=mock_response)
+
+        with patch("nthlayer_bench.app.httpx.AsyncClient", return_value=mock_client):
+            with patch.object(cs, "set_timer"):
+                await cs._check_health()
+
+        assert cs._consecutive_failures == 0
+        assert cs.is_connected
+
+    async def test_degraded_response_resets_failures(self):
+        """Non-200 (e.g. 503) means core is reachable but degraded —
+        not a network failure. Reset the backoff so we keep polling
+        at BASE cadence and surface recovery quickly."""
+        cs = ConnectionStatus("http://test:8000")
+        cs._consecutive_failures = 3
+
+        mock_response = AsyncMock()
+        mock_response.status_code = 503
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(return_value=mock_response)
+
+        with patch("nthlayer_bench.app.httpx.AsyncClient", return_value=mock_client):
+            with patch.object(cs, "set_timer"):
+                await cs._check_health()
+
+        assert cs._consecutive_failures == 0
+        assert not cs.is_connected  # 503 → not connected, but failures reset
+
+    async def test_check_schedules_next_with_backed_off_interval(self):
+        """End-to-end: a connection error increments failures and the
+        next check is scheduled at the backed-off interval, not BASE."""
+        cs = ConnectionStatus("http://test:8000")
+
+        import httpx
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("refused"))
+
+        with patch("nthlayer_bench.app.httpx.AsyncClient", return_value=mock_client):
+            with patch.object(cs, "set_timer") as set_timer:
+                # First failure → consecutive_failures=1 → next interval=10s
+                await cs._check_health()
+                set_timer.assert_called_with(10.0, cs._check_health)
+
+                # Second failure → 20s
+                await cs._check_health()
+                set_timer.assert_called_with(20.0, cs._check_health)
+
+                # Third → 40s
+                await cs._check_health()
+                set_timer.assert_called_with(40.0, cs._check_health)
 
 
 class TestBenchApp:
@@ -327,6 +454,98 @@ class TestBenchApp:
 
         # Despite two scheduled polls, only one toast was dispatched.
         assert len(notify_calls) == 1
+
+    def test_app_exposes_write_queue(self):
+        """Bead 9b: BenchApp owns a WriteQueue accessible via the
+        ``write_queue`` property. Screens fetch this to wire panels
+        with offline-submit capability."""
+        from nthlayer_bench.sre.write_queue import WriteQueue
+
+        app = BenchApp(core_url="http://test:8000")
+        assert isinstance(app.write_queue, WriteQueue)
+        # Same instance across accesses.
+        assert app.write_queue is app.write_queue
+
+    async def test_app_drain_dispatches_toast_on_successful_submissions(self):
+        """When the drain timer replays queued notes successfully,
+        a toast surfaces the count so the operator gets recovery
+        confirmation."""
+        from nthlayer_bench.sre.write_queue import DrainResult
+        from nthlayer_common.verdicts import create as verdict_create
+
+        app = BenchApp(core_url="http://test:8000")
+        # Real enqueue so len(queue) > 0 reaches the drain branch
+        # (patching obj.__len__ on the instance doesn't intercept
+        # the built-in len() — Python looks up __len__ on the type).
+        v = verdict_create(
+            subject={"type": "custom", "ref": "case-1", "summary": "x"},
+            judgment={"action": "flag", "confidence": 1.0, "reasoning": "x"},
+            producer={"system": "nthlayer-bench"},
+            metadata={"custom": {"author": "alice"}},
+        )
+        app._write_queue.enqueue(v, "case-1")
+
+        notify_calls = []
+
+        def fake_notify(message, *, title=None, severity=None, markup=None, **kwargs):
+            notify_calls.append({
+                "message": message, "title": title,
+                "severity": severity, "markup": markup,
+            })
+
+        async def fake_drain(client):
+            return DrainResult(submitted=2, duplicates=0, remaining=0)
+
+        with patch.object(app._write_queue, "drain", new=fake_drain):
+            with patch.object(app, "notify", side_effect=fake_notify):
+                await app._drain_write_queue()
+
+        assert len(notify_calls) == 1
+        call = notify_calls[0]
+        # Assert on the count + structural fields rather than the
+        # operator-facing prose (the message text is UX copy that may
+        # evolve; severity/markup contracts shouldn't).
+        assert "2" in call["message"]
+        assert call["severity"] == "information"
+        assert call["markup"] is False
+
+    async def test_app_drain_no_toast_when_only_duplicates(self):
+        """409 duplicates drop silently — no toast spam during the
+        recovery window. Operator sees the queue empty out via the
+        panel's pending count, not a toast for each duplicate."""
+        from nthlayer_bench.sre.write_queue import DrainResult
+        from nthlayer_common.verdicts import create as verdict_create
+
+        app = BenchApp(core_url="http://test:8000")
+        v = verdict_create(
+            subject={"type": "custom", "ref": "case-1", "summary": "x"},
+            judgment={"action": "flag", "confidence": 1.0, "reasoning": "x"},
+            producer={"system": "nthlayer-bench"},
+            metadata={"custom": {"author": "alice"}},
+        )
+        app._write_queue.enqueue(v, "case-1")
+
+        notify_calls = []
+
+        def fake_notify(*args, **kwargs):
+            notify_calls.append(args)
+
+        async def fake_drain(client):
+            return DrainResult(submitted=0, duplicates=3, remaining=0)
+
+        with patch.object(app._write_queue, "drain", new=fake_drain):
+            with patch.object(app, "notify", side_effect=fake_notify):
+                await app._drain_write_queue()
+
+        assert notify_calls == []
+
+    async def test_app_drain_skips_when_queue_empty(self):
+        """No-op cycle: empty queue → no drain call, no toast. The
+        timer fires every 5s but only does work when there's work."""
+        app = BenchApp(core_url="http://test:8000")
+        with patch.object(app._write_queue, "drain") as drain_mock:
+            await app._drain_write_queue()
+        drain_mock.assert_not_called()
 
     async def test_app_skips_notification_when_no_new_events(self):
         """No-op cycle: poll returns empty list → no notify calls. The

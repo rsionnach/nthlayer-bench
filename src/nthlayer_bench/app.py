@@ -17,11 +17,16 @@ from textual.widgets import Footer, Header, Static
 from nthlayer_common.api_client import CoreAPIClient
 
 from nthlayer_bench.sre.escalation import EscalationEvent, EscalationMonitor
+from nthlayer_bench.sre.write_queue import WriteQueue
 
 # Notification poller cadence — the operator gets a toast within ~5s of
 # a high/critical breach landing on core. Matches the brief/review/bench
 # panel cadence so all bench polling is on a single tick budget.
 ESCALATION_POLL_SECONDS = 5.0
+
+# Write-queue drain cadence. Same 5s tick — operator gets queued notes
+# replayed within one polling cycle of core recovering.
+WRITE_QUEUE_DRAIN_SECONDS = 5.0
 
 # Map breach severity to Textual's toast severity (which controls
 # colour/persistence). Hoisted to module scope so the mapping is
@@ -33,8 +38,42 @@ _SEVERITY_TO_TEXTUAL: dict[str, str] = {
 }
 
 
+# Reconnect backoff schedule. On a clean health check we re-poll every
+# BASE seconds. On consecutive failures the interval doubles until it
+# caps at MAX — so a long core outage doesn't generate one health
+# request per 5s for hours, but the operator still gets a status flip
+# back to "Connected" within the cap once core returns.
+RECONNECT_BASE_INTERVAL = 5.0
+RECONNECT_MAX_INTERVAL = 60.0
+
+
+def _compute_next_interval(consecutive_failures: int) -> float:
+    """Pure helper for ``ConnectionStatus``: compute the next health-check
+    delay given the current consecutive-failure count.
+
+    failures=0 → BASE (clean state, normal cadence).
+    failures≥1 → BASE * 2^failures, capped at MAX.
+    Hoisted to module scope so unit tests can assert the full backoff
+    schedule (5 → 10 → 20 → 40 → 60 → 60 …) without driving the
+    Textual loop on real wall-clock waits.
+    """
+    if consecutive_failures <= 0:
+        return RECONNECT_BASE_INTERVAL
+    interval = RECONNECT_BASE_INTERVAL * (2 ** consecutive_failures)
+    return min(interval, RECONNECT_MAX_INTERVAL)
+
+
 class ConnectionStatus(Static):
-    """Displays connection status to nthlayer-core."""
+    """Displays connection status to nthlayer-core.
+
+    Reconnect attempts use exponential backoff: a single failure
+    triggers a 10s retry, two failures 20s, then 40s, then capped at
+    60s. On a successful check, the failure counter resets and the
+    next poll fires at the BASE interval. Implemented via one-shot
+    ``set_timer`` rescheduled by each ``_check_health`` invocation
+    (Textual's ``set_interval`` is fixed-cadence; we need a dynamic
+    interval driven by the result of the previous check).
+    """
 
     CONNECTED = "[green]● Connected[/green]"
     DISCONNECTED = "[red]● Disconnected[/red] — Core unreachable"
@@ -44,10 +83,14 @@ class ConnectionStatus(Static):
         super().__init__(self.DISCONNECTED)
         self.core_url = core_url.rstrip("/")
         self._connected = False
+        # Consecutive failure counter — drives the backoff schedule via
+        # _compute_next_interval. Reset to 0 on every successful check
+        # (whether 200 or non-200; only network-level failures count).
+        self._consecutive_failures = 0
 
     def on_mount(self) -> None:
-        self.set_interval(5.0, self._check_health)
-        # Check immediately on mount
+        # Check immediately on mount; subsequent checks reschedule
+        # themselves at the end of _check_health based on the result.
         self.call_later(self._check_health)
 
     async def _check_health(self) -> None:
@@ -57,12 +100,21 @@ class ConnectionStatus(Static):
                 if resp.status_code == 200:
                     self._connected = True
                     self.update(self.CONNECTED)
+                    self._consecutive_failures = 0
                 else:
                     self._connected = False
                     self.update(self.DEGRADED)
+                    # Non-200 still counts as a reachable core — degraded
+                    # rather than disconnected. Keep poll cadence at BASE
+                    # so operators see the recovery quickly.
+                    self._consecutive_failures = 0
         except (httpx.RequestError, OSError):
             self._connected = False
             self.update(self.DISCONNECTED)
+            self._consecutive_failures += 1
+
+        next_seconds = _compute_next_interval(self._consecutive_failures)
+        self.set_timer(next_seconds, self._check_health)
 
     @property
     def is_connected(self) -> bool:
@@ -111,6 +163,21 @@ class BenchApp(App):
         # poll is still awaiting; without the lock both would observe
         # the same _seen_ids snapshot and dispatch the same toast twice.
         self._escalation_lock = asyncio.Lock()
+        # Write queue for operator notes that couldn't be submitted
+        # because core was unreachable. The drain timer below replays
+        # them; 409 conflict detection drops duplicates cleanly.
+        self._write_queue = WriteQueue()
+
+    @property
+    def write_queue(self) -> WriteQueue:
+        """The app-shared queue of pending operator-note submissions.
+
+        Reasoning-capture panels read this to count pending entries
+        for their status line and to enqueue on
+        :class:`CoreUnreachableError`. The app drains it on a 5s
+        interval via :meth:`_drain_write_queue`.
+        """
+        return self._write_queue
 
     @property
     def client(self) -> CoreAPIClient:
@@ -174,6 +241,11 @@ class BenchApp(App):
         self.set_interval(ESCALATION_POLL_SECONDS, self._poll_escalations)
         self.call_later(self._poll_escalations)
 
+        # Start the write-queue drainer. Operator notes that couldn't
+        # be submitted live (core unreachable) replay automatically
+        # within one tick of core recovering.
+        self.set_interval(WRITE_QUEUE_DRAIN_SECONDS, self._drain_write_queue)
+
         if self._initial_case_id is not None:
             from nthlayer_bench.screens.case_detail import CaseDetailScreen
             self.push_screen(CaseDetailScreen(self.client, self._initial_case_id))
@@ -193,6 +265,28 @@ class BenchApp(App):
             events = await self._escalation_monitor.poll(self.client)
             for event in events:
                 self._notify_escalation(event)
+
+    async def _drain_write_queue(self) -> None:
+        """Try to replay any queued operator-note submissions.
+
+        WriteQueue.drain owns its own skip-if-locked guard, so a slow
+        core won't allow concurrent drains to race the same queue. On
+        successful submissions, dispatch a one-line toast so the
+        operator sees the recovery confirmation; 409s ("already
+        submitted on a prior attempt") drop silently to avoid toast
+        spam during the recovery window.
+        """
+        if len(self._write_queue) == 0:
+            return
+        result = await self._write_queue.drain(self.client)
+        if result.submitted > 0:
+            plural = "s" if result.submitted != 1 else ""
+            self.notify(
+                f"Submitted {result.submitted} pending note{plural}.",
+                title="Write queue",
+                severity="information",
+                markup=False,
+            )
 
     def _notify_escalation(self, event: EscalationEvent) -> None:
         """Render a single escalation event as a Textual toast.
