@@ -6,7 +6,8 @@ navigate. Keeping screens out of ``widgets/`` makes navigation routes
 easy to find.
 """
 
+from nthlayer_bench.screens.case_bench import CaseBenchScreen
 from nthlayer_bench.screens.case_detail import CaseDetailScreen
 from nthlayer_bench.screens.case_review import CaseReviewScreen
 
-__all__ = ["CaseDetailScreen", "CaseReviewScreen"]
+__all__ = ["CaseBenchScreen", "CaseDetailScreen", "CaseReviewScreen"]

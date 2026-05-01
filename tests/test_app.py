@@ -1,9 +1,29 @@
 """Tests for the Bench Textual application."""
 
+import contextlib
+
 import pytest
 from unittest.mock import AsyncMock, patch
 
 from nthlayer_bench.app import BenchApp, ConnectionStatus
+from nthlayer_bench.sre.case_bench import CaseBenchView
+
+
+@contextlib.contextmanager
+def _empty_case_bench():
+    """Patch fetch_case_bench to return an empty view so app-lifecycle
+    tests don't crash on the case-bench panel's auto-poll.
+
+    BenchApp pushes CaseBenchScreen on mount when no --case-id is set;
+    that screen mounts CaseBenchPanel which calls fetch_case_bench on
+    its first refresh. Tests that aren't exercising the case-bench
+    code path inject an empty result here so the panel renders
+    'No active cases.' and stays out of the way."""
+    with patch(
+        "nthlayer_bench.widgets.case_bench.fetch_case_bench",
+        new=AsyncMock(return_value=CaseBenchView()),
+    ):
+        yield
 
 
 class TestConnectionStatus:
@@ -85,19 +105,20 @@ class TestBenchApp:
 
         app = BenchApp(core_url="http://test:8000")
 
-        async with app.run_test() as pilot:
-            # Touch the property so the lazy client gets instantiated.
-            client = app.client
-            assert isinstance(client, CoreAPIClient)
-            assert app._client is client
+        with _empty_case_bench():
+            async with app.run_test() as pilot:
+                # Touch the property so the lazy client gets instantiated.
+                client = app.client
+                assert isinstance(client, CoreAPIClient)
+                assert app._client is client
 
-            with patch.object(client, "close", new=AsyncMock()) as close_mock:
-                await app._on_exit_app()
-                close_mock.assert_awaited_once()
+                with patch.object(client, "close", new=AsyncMock()) as close_mock:
+                    await app._on_exit_app()
+                    close_mock.assert_awaited_once()
 
-            # Closed client is cleared so a re-entered loop wouldn't
-            # touch a stale connection pool.
-            assert app._client is None
+                # Closed client is cleared so a re-entered loop wouldn't
+                # touch a stale connection pool.
+                assert app._client is None
 
     async def test_app_exit_app_chains_super_even_when_close_raises(self):
         """If client.close() raises (transport half-closed by a server
@@ -107,32 +128,37 @@ class TestBenchApp:
         from nthlayer_common.api_client import CoreAPIClient
 
         app = BenchApp(core_url="http://test:8000")
-        async with app.run_test():
-            client = app.client
-            assert isinstance(client, CoreAPIClient)
+        with _empty_case_bench():
+            async with app.run_test():
+                client = app.client
+                assert isinstance(client, CoreAPIClient)
 
-            with patch.object(
-                client, "close", new=AsyncMock(side_effect=RuntimeError("transport gone"))
-            ):
-                with pytest.raises(RuntimeError, match="transport gone"):
-                    # super()._on_exit_app() runs in the finally block, but
-                    # the original close-raise still propagates after.
-                    await app._on_exit_app()
+                with patch.object(
+                    client, "close", new=AsyncMock(side_effect=RuntimeError("transport gone"))
+                ):
+                    with pytest.raises(RuntimeError, match="transport gone"):
+                        # super()._on_exit_app() runs in the finally block, but
+                        # the original close-raise still propagates after.
+                        await app._on_exit_app()
 
-            assert app._client is None  # cleared in the finally branch
+                assert app._client is None  # cleared in the finally branch
 
-    async def test_app_exit_without_client_does_not_crash(self):
-        """If the app exits without ever instantiating the client (no
-        screens that needed core access), _on_exit_app must handle the
-        None gracefully rather than raising."""
+    async def test_app_exit_does_not_crash_when_client_is_none(self):
+        """If _client is None at exit time (manually cleared, never
+        instantiated, or already closed), _on_exit_app must handle it
+        gracefully — None-guard in the finally branch."""
         app = BenchApp(core_url="http://test:8000")
-        async with app.run_test():
-            assert app._client is None
-            await app._on_exit_app()  # must not raise
+        with _empty_case_bench():
+            async with app.run_test():
+                # Force-clear so we can exercise the None branch even
+                # though the case-bench panel touched the client at mount.
+                app._client = None
+                await app._on_exit_app()  # must not raise
 
     async def test_app_pushes_case_detail_screen_when_initial_case_id_set(self):
         """End-to-end --case-id behavior: on mount, the app pushes a
-        CaseDetailScreen wired to the configured case_id."""
+        CaseDetailScreen wired to the configured case_id (NOT the case
+        bench)."""
         from nthlayer_bench.screens.case_detail import CaseDetailScreen
         from nthlayer_bench.sre.brief import PagingBrief
 
@@ -154,3 +180,46 @@ class TestBenchApp:
                 await pilot.pause()
                 assert isinstance(app.screen, CaseDetailScreen)
                 assert app.screen._case_id == "case-XYZ"
+
+    async def test_app_pushes_case_bench_screen_when_no_initial_case_id(self):
+        """Default behavior: bench launches without --case-id → operator
+        lands on CaseBenchScreen (the queue) as the home view."""
+        from nthlayer_bench.screens.case_bench import CaseBenchScreen
+
+        app = BenchApp(core_url="http://test:8000")
+        with _empty_case_bench():
+            async with app.run_test() as pilot:
+                await pilot.pause()
+                await pilot.pause()
+                assert isinstance(app.screen, CaseBenchScreen)
+
+    async def test_deep_link_pop_returns_to_case_bench(self):
+        """Launch with --case-id (deep-link from a paging URL), pop the
+        case-detail screen → operator lands on the case bench, not the
+        app's empty placeholder. CaseBenchScreen is pushed FIRST so the
+        bench is always at the bottom of the stack."""
+        from nthlayer_bench.screens.case_bench import CaseBenchScreen
+        from nthlayer_bench.screens.case_detail import CaseDetailScreen
+        from nthlayer_bench.sre.brief import PagingBrief
+
+        brief = PagingBrief(
+            case_id="case-XYZ",
+            service="fraud-detect",
+            severity=2,
+            summary="s",
+            state="triage_complete",
+            awaiting=["correlation", "remediation"],
+        )
+        app = BenchApp(core_url="http://test:8000", initial_case_id="case-XYZ")
+        with _empty_case_bench(), patch(
+            "nthlayer_bench.widgets.case_brief.build_paging_brief",
+            new=AsyncMock(return_value=brief),
+        ):
+            async with app.run_test() as pilot:
+                await pilot.pause()
+                await pilot.pause()
+                assert isinstance(app.screen, CaseDetailScreen)
+
+                await app.pop_screen()
+                await pilot.pause()
+                assert isinstance(app.screen, CaseBenchScreen)

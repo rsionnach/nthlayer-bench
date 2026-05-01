@@ -117,12 +117,19 @@ async def test_case_detail_screen_push_pop_push_reuses_app_client():
     from nthlayer_common.api_client import CoreAPIClient
 
     from nthlayer_bench.app import BenchApp
+    from nthlayer_bench.sre.case_bench import CaseBenchView
 
     app = BenchApp(core_url="http://test:8000")
 
     with patch(
         "nthlayer_bench.widgets.case_brief.build_paging_brief",
         new=AsyncMock(return_value=_make_brief("case-A")),
+    ), patch(
+        # BenchApp pushes CaseBenchScreen on mount when no --case-id; the
+        # case-bench panel polls fetch_case_bench. Empty view here so the
+        # screen-stack assertions below aren't fighting the auto-poll.
+        "nthlayer_bench.widgets.case_bench.fetch_case_bench",
+        new=AsyncMock(return_value=CaseBenchView()),
     ):
         async with app.run_test() as pilot:
             client_first = app.client

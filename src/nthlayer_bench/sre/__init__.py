@@ -15,6 +15,14 @@ from nthlayer_bench.sre.brief import (
     build_paging_brief,
     render_brief,
 )
+from nthlayer_bench.sre.case_bench import (
+    PRIORITY_ORDER,
+    CaseBenchError,
+    CaseBenchView,
+    CaseSummary,
+    fetch_case_bench,
+    render_case_bench,
+)
 from nthlayer_bench.sre.post_incident import (
     PostIncidentError,
     PostIncidentReview,
@@ -35,6 +43,13 @@ __all__ = [
     "PagingBrief",
     "build_paging_brief",
     "render_brief",
+    # case bench
+    "PRIORITY_ORDER",
+    "CaseBenchError",
+    "CaseBenchView",
+    "CaseSummary",
+    "fetch_case_bench",
+    "render_case_bench",
     # post-incident
     "PostIncidentError",
     "PostIncidentReview",

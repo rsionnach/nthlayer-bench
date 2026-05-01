@@ -64,6 +64,13 @@ class CaseDetailScreen(Screen):
         self._client = client
         self._case_id = case_id
 
+    @property
+    def case_id(self) -> str:
+        """Public accessor — used by the case bench's double-push guard
+        to compare the topmost screen's case against an incoming
+        selection without reaching into private attrs."""
+        return self._case_id
+
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal(id="body"):

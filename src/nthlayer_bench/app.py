@@ -126,14 +126,20 @@ class BenchApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        # If launched with --case-id, drop the operator straight onto the
-        # case detail screen. Useful for paging links and direct demos
-        # before the situation board / case bench land.
+        # CaseBenchScreen is always the home view — push it first so it
+        # sits at the bottom of the screen stack. With --case-id, push
+        # CaseDetailScreen on top; pressing escape from there pops back
+        # to the bench (not the empty-app default Static), preserving
+        # the operator's path back to their queue.
+        #
+        # Deferred imports: keep screens/ off the import path for headless
+        # app construction (tests instantiate BenchApp without ever
+        # pushing a screen) and avoid future app↔screens cycles if a
+        # screen ever needs to import from app for navigation actions
+        # or shared state.
+        from nthlayer_bench.screens.case_bench import CaseBenchScreen
+        self.push_screen(CaseBenchScreen(self.client))
+
         if self._initial_case_id is not None:
-            # Deferred import: keeps screens/ off the import path for
-            # headless app construction (tests instantiate BenchApp without
-            # ever pushing a screen) and avoids future app↔screens cycles
-            # if a screen ever needs to import from app for navigation
-            # actions or shared state.
             from nthlayer_bench.screens.case_detail import CaseDetailScreen
             self.push_screen(CaseDetailScreen(self.client, self._initial_case_id))
