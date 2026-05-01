@@ -23,7 +23,16 @@ class CaseDetailScreen(Screen):
     BINDINGS = [
         Binding("escape", "app.pop_screen", "Back"),
         Binding("q", "app.pop_screen", "Back", show=False),
+        Binding("r", "open_review", "Review"),
     ]
+
+    def action_open_review(self) -> None:
+        """Push the post-incident review screen for this case."""
+        # Deferred import: same rationale as BenchApp.on_mount — keeps
+        # the screens/ subpackage out of the import path for headless
+        # test construction and avoids future detail↔review cycles.
+        from nthlayer_bench.screens.case_review import CaseReviewScreen
+        self.app.push_screen(CaseReviewScreen(self._client, self._case_id))
 
     # 36 cols on the context pane fits ID + priority badge + lease
     # countdown comfortably at the standard 80-col terminal layout, leaving

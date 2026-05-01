@@ -7,5 +7,6 @@ easy to find.
 """
 
 from nthlayer_bench.screens.case_detail import CaseDetailScreen
+from nthlayer_bench.screens.case_review import CaseReviewScreen
 
-__all__ = ["CaseDetailScreen"]
+__all__ = ["CaseDetailScreen", "CaseReviewScreen"]
