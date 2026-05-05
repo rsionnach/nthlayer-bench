@@ -69,7 +69,7 @@ Priority-grouped list of active cases. Operator home view.
 
 ### `brief` command (opensrm-81rn.4) — P4 SRE operator surface
 
-Spec: `docs/superpowers/specs/2026-04-28-p4-bench-brief-design.md`
+Spec: [`docs/superpowers/specs/2026-04-28-p4-bench-brief-design.md`](https://github.com/rsionnach/nthlayer/blob/main/docs/superpowers/specs/2026-04-28-p4-bench-brief-design.md) (in `nthlayer/` ecosystem hub)
 
 Migrated from `nthlayer-respond/feat/opensrm-0rg-cli` (sre/brief.py). Highest-priority SRE command.
 
@@ -93,7 +93,7 @@ Migrated from `nthlayer-respond/feat/opensrm-0rg-cli` (sre/brief.py). Highest-pr
 
 ### `post_incident` command — P4 SRE operator surface
 
-Spec: `docs/superpowers/specs/2026-04-26-respond-sre-cli-inventory-for-bench.md` (section 5)
+Spec: [`docs/superpowers/specs/2026-04-26-respond-sre-cli-inventory-for-bench.md`](https://github.com/rsionnach/nthlayer/blob/main/docs/superpowers/specs/2026-04-26-respond-sre-cli-inventory-for-bench.md) (in `nthlayer/` ecosystem hub, section 5)
 
 Migrated from `nthlayer-respond/feat/opensrm-0rg-cli` (sre/post_incident.py). Second-highest-priority SRE command.
 
