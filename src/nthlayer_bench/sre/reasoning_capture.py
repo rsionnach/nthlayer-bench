@@ -201,8 +201,10 @@ def build_operator_note_verdict(
         producer={"system": "nthlayer-bench", "instance": "operator"},
         metadata={"custom": {"author": normalised_author}},
     )
-    verdict.parent_ids = [anchor_id]
+    # opensrm-saun.1.2: typed column. Operator notes ride the canonical
+    # operator_note verdict type from RBAC §10.
     verdict.verdict_type = "operator_note"
+    verdict.parent_ids = [anchor_id]
     verdict.service = service
     return verdict
 

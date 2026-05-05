@@ -6,6 +6,31 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## v1.5.0 — 2026-05-03
+
+First lockstep release with the rest of the v1.5 ecosystem. Phase 5
+landed minor changes here:
+
+**`verdict_type=operator_note` on operator-note submissions**
+(opensrm-saun.1.2). `sre/reasoning_capture.py:build_operator_note_verdict`
+now sets `verdict.verdict_type = "operator_note"` (matching the RBAC §10
+canonical verdict-type taxonomy). The verdict's `subject.type` remains
+`"custom"` because `operator_note` is not in `VALID_SUBJECT_TYPES`; the
+typed column is what core's `GET /verdicts?type=operator_note` filter
+reads.
+
+**Test fixture compat with `to_dict(Verdict)`'s wire-canonical rename**
+(opensrm-saun.1.2). `tests/test_sre_reasoning_capture.py` previously
+asserted `payload["verdict_type"]`; updated to `payload["type"]`
+following the `to_dict()` rename in `nthlayer-common`. The verdict
+dataclass keeps its internal field name; the wire format uses the
+HTTP-canonical name.
+
+The bench logic layer was not otherwise touched in Phase 5 — the saun.1
+three-tier integration test verified bench's read path (via
+`sre.case_bench.fetch_case_bench`) works through core's HTTP API
+end-to-end. The widget rendering layer is unit-tested separately.
+
 ## Provenance
 
 `nthlayer-bench` is the Tier 3 (operator interface) process in the three-tier

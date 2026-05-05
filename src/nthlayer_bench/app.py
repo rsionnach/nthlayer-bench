@@ -215,7 +215,7 @@ class BenchApp(App):
             id="status-bar",
         )
         yield Container(
-            Static("NthLayer Bench v1.5.0a1\n\nPhase 4 screens coming soon: Situation Board, Case Bench, Case Detail"),
+            Static("NthLayer Bench v1.5.0\n\nPhase 4 screens coming soon: Situation Board, Case Bench, Case Detail"),
             id="main",
         )
         yield Footer()

@@ -35,7 +35,7 @@ def _validate_case_id(raw: str | None) -> str | None:
 
 def main():
     parser = argparse.ArgumentParser(description="NthLayer Bench — operator TUI")
-    parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.5.0a1")
+    parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.5.0")
     parser.add_argument("--core-url", default="http://localhost:8000",
                         help="Core API URL (default: http://localhost:8000)")
     parser.add_argument("--case-id", default=None,

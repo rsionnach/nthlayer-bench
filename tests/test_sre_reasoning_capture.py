@@ -275,9 +275,10 @@ async def test_submit_constructs_operator_note_verdict():
     client.submit_verdict.assert_awaited_once()
     payload = client.submit_verdict.await_args.args[0]
     # subject.type is "custom" because operator_note isn't a valid
-    # VALID_SUBJECT_TYPES value; the role lives on verdict_type instead.
+    # VALID_SUBJECT_TYPES value; the role lives on the typed column
+    # (which to_dict emits as wire-canonical "type" since opensrm-saun.1.2).
     assert payload["subject"]["type"] == "custom"
-    assert payload["verdict_type"] == "operator_note"
+    assert payload["type"] == "operator_note"
     assert payload["judgment"]["reasoning"] == "investigated, looks like the deploy"
     assert payload["metadata"]["custom"]["author"] == "alice@nthlayer.com"
     assert payload["parent_ids"] == ["vrd-anchor-001"]
