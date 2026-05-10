@@ -6,6 +6,13 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## [1.6.1](https://github.com/rsionnach/nthlayer-bench/compare/v1.6.0...v1.6.1) (2026-05-10)
+
+
+### Bug Fixes
+
+* **ci:** add tag-push + workflow_dispatch triggers to release.yml ([dbf2d39](https://github.com/rsionnach/nthlayer-bench/commit/dbf2d3974f63a6494632723a6b74e8a7f6e0cd5c))
+
 ## [1.6.0](https://github.com/rsionnach/nthlayer-bench/compare/v1.5.0...v1.6.0) (2026-05-10)
 
 
