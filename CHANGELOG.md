@@ -6,6 +6,22 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## [1.6.0](https://github.com/rsionnach/nthlayer-bench/compare/v1.5.0...v1.6.0) (2026-05-10)
+
+
+### Features
+
+* smoke-test gate before PyPI publish ([95cff44](https://github.com/rsionnach/nthlayer-bench/commit/95cff44f1a7d03169bf862d1db092f20efa602e2))
+
+
+### Documentation
+
+* add README — Tier 3 operator TUI overview ([3390e36](https://github.com/rsionnach/nthlayer-bench/commit/3390e36648387bacd97fe197a418d430ba6e875d))
+* **CLAUDE.md:** document release-please integration ([36abe2b](https://github.com/rsionnach/nthlayer-bench/commit/36abe2b7e92b91c911b339b6551f9fd2544bff54))
+* **CLAUDE.md:** document Renovate config (Phase 4) ([e41bb56](https://github.com/rsionnach/nthlayer-bench/commit/e41bb56d5c4fec32ea5e4d1e624d991df4190ade))
+* **CLAUDE.md:** document smoke-test gate (Phase 2) ([009249e](https://github.com/rsionnach/nthlayer-bench/commit/009249e971e4b171a80a1582b06005b217f75e82))
+* **claude:** repoint stale ecosystem refs to nthlayer/docs/superpowers/ ([ca43255](https://github.com/rsionnach/nthlayer-bench/commit/ca432550cc962171789ee31a5c97c767b1f137ba))
+
 ## v1.5.0 — 2026-05-03
 
 First lockstep release with the rest of the v1.5 ecosystem. Phase 5
