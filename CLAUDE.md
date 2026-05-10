@@ -197,3 +197,7 @@ Dev: `pytest>=8.2`, `pytest-asyncio>=0.23`, `ruff>=0.8`
 ## Documentation
 
 - `README.md` — added 2026-04-28; project-level overview for GitHub and contributors
+
+## CI / Release pipeline
+
+nthlayer-bench is the pilot repo for `googleapis/release-please-action@v4`. On every push to `main`, release-please inspects Conventional Commits and maintains a release PR that bumps `pyproject.toml` and appends `CHANGELOG.md`. Config lives in `release-please-config.json` (package type `python`, `changelog-sections` filter) and `.release-please-manifest.json` (current version anchor). Commit taxonomy: `feat`/`fix`/`perf`/`deps`/`refactor`/`docs` surface in the changelog; `chore`/`test`/`ci`/`build`/`style` are hidden. When the release PR is merged, release-please creates the GitHub release tag and the existing `release.yml` (trusted-publishing PyPI flow) fires unchanged. Prerequisite: repo setting "Allow GitHub Actions to create and approve pull requests" must be enabled (Settings → Actions → General → Workflow permissions) — the first run fails without it.
