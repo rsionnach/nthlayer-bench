@@ -1,0 +1,56 @@
+# Dependabot — dependency-bump automation. Replaces the Renovate
+# config that briefly lived at renovate.json (dropped 2026-05-10 to
+# avoid the Mend.io account requirement). Auto-merge for patch
+# updates on external runtime deps + patch/minor on dev deps is
+# handled by .github/workflows/dependabot-automerge.yml.
+version: 2
+
+updates:
+  # Python dependencies declared in pyproject.toml + locked in uv.lock.
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Dublin
+    labels:
+      - dependencies
+    groups:
+      # nthlayer-ecosystem siblings stay together in one PR per cycle
+      # so cross-repo coordination lands as a single review.
+      nthlayer-ecosystem:
+        patterns:
+          - "nthlayer-*"
+        update-types:
+          - "patch"
+          - "minor"
+      # Dev tooling (pytest, ruff, etc.) groups so we don't review
+      # five churn-PRs every Monday.
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - "patch"
+          - "minor"
+    # Anything not in a group (external runtime deps + any major bump)
+    # opens its own PR. Major bumps need a human eye anyway.
+    open-pull-requests-limit: 10
+
+  # GitHub Actions used in workflows under .github/workflows/.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Dublin
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      ci-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+          - "minor"
