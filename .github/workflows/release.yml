@@ -26,6 +26,20 @@ jobs:
       - name: Verify package
         run: uvx twine check dist/*
 
+      # Smoke gate: install the freshly-built wheel into a clean
+      # python:3.11-slim container (no project venv, no source tree)
+      # and run tests/smoke/ against it. Catches stale exports,
+      # MANIFEST.in gaps, missing runtime deps, broken entry points.
+      # Failure here blocks the PyPI publish step below.
+      - name: Smoke test in clean Docker container
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/dist:/dist:ro" \
+            -v "$GITHUB_WORKSPACE/tests/smoke:/smoke:ro" \
+            -w /smoke \
+            python:3.11-slim \
+            bash -c "set -e; pip install --quiet --no-cache-dir /dist/*.whl pytest && pytest -q /smoke"
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         # Uses trusted publishing — configure at:
