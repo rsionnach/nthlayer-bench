@@ -1,0 +1,73 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits"
+  ],
+  "timezone": "Europe/Dublin",
+  "schedule": [
+    "before 6am on weekdays"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "automerge": false,
+  "platformAutomerge": true,
+  "packageRules": [
+    {
+      "description": "Auto-merge external patch updates after CI green",
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "matchPackageNames": [
+        "!/^nthlayer-/"
+      ],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Group nthlayer-ecosystem sibling bumps; always require review (semver discipline isn't tight enough across siblings to auto-merge a patch bump)",
+      "matchPackageNames": [
+        "/^nthlayer-/"
+      ],
+      "groupName": "nthlayer ecosystem",
+      "addLabels": [
+        "ecosystem-bump",
+        "needs-review"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "Major bumps always need a human eye",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "addLabels": [
+        "needs-review"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "Group dev dependencies (pytest, ruff, etc.) into one PR per cycle",
+      "matchDepTypes": [
+        "dev",
+        "devDependencies"
+      ],
+      "groupName": "dev dependencies",
+      "automerge": true,
+      "automergeType": "pr",
+      "matchUpdateTypes": [
+        "patch",
+        "minor"
+      ]
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": [
+      "security",
+      "needs-review"
+    ]
+  }
+}
