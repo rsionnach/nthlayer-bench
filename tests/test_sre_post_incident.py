@@ -16,6 +16,8 @@ from nthlayer_bench.sre.post_incident import (
     CaseNotFoundError,
     CoreUnreachableError,
     PostIncidentReview,
+    VerdictAccuracy,
+    _build_accuracy,
     build_post_incident_review,
     render_post_incident_review,
 )
@@ -705,3 +707,145 @@ class TestRenderPostIncidentReview:
     def test_empty_to_improve_renders_placeholder(self):
         text = render_post_incident_review(self._make_review())
         assert "(no overridden outcomes yet)" in text
+
+
+# ------------------------------------------------------------------ #
+# opensrm-jmy.19: mutation-style override attribution                  #
+# ------------------------------------------------------------------ #
+
+class TestMutationStyleOverride:
+    """opensrm-jmy.19: bench surfaces outcome.override attribution off
+    the original verdict (mutation-style), parallel to its existing
+    outcome_resolution lineage walk (lineage-style)."""
+
+    def test_build_accuracy_extracts_override_fields_from_original(self):
+        """A verdict whose own outcome.status=='overridden' with a populated
+        outcome.override produces a VerdictAccuracy with override_* fields."""
+        chain = [
+            {
+                "id": "vrd-1",
+                "subject": {"type": "triage"},
+                "judgment": {"confidence": 0.85},
+                "outcome": {
+                    "status": "overridden",
+                    "override": {
+                        "by": "operator-hash",
+                        "at": "2026-05-25T10:00:00+00:00",
+                        "action": "approve",
+                        "reasoning": "false positive on synthetic txn",
+                        "original_action": "reject",
+                    },
+                },
+            },
+        ]
+        accuracy = _build_accuracy(chain)
+        assert len(accuracy) == 1
+        a = accuracy[0]
+        assert a.verdict_id == "vrd-1"
+        assert a.outcome_status == "overridden"
+        assert a.override_by == "operator-hash"
+        assert a.override_at == "2026-05-25T10:00:00+00:00"
+        assert a.override_action == "approve"
+        assert a.override_reasoning == "false positive on synthetic txn"
+        assert a.override_original_action == "reject"
+
+    def test_build_accuracy_no_override_leaves_fields_none(self):
+        chain = [
+            {
+                "id": "vrd-1",
+                "subject": {"type": "triage"},
+                "judgment": {"confidence": 0.85},
+                "outcome": {"status": "pending"},
+            },
+        ]
+        a = _build_accuracy(chain)[0]
+        assert a.outcome_status is None  # pending isn't a final status in this view
+        assert a.override_by is None
+        assert a.override_reasoning is None
+
+    def test_build_accuracy_empty_override_dict_ignored(self):
+        """An empty outcome.override (malformed payload) doesn't fabricate attribution."""
+        chain = [
+            {
+                "id": "vrd-1",
+                "subject": {"type": "triage"},
+                "judgment": {"confidence": 0.85},
+                "outcome": {"status": "overridden", "override": {}},  # empty
+            },
+        ]
+        a = _build_accuracy(chain)[0]
+        assert a.override_by is None
+        assert a.outcome_status is None  # no real override → no mutation-style status
+
+    def test_lineage_outcome_resolution_still_works(self):
+        """Pre-jmy.19 lineage-style behaviour is unchanged."""
+        chain = [
+            {
+                "id": "vrd-1",
+                "subject": {"type": "triage"},
+                "judgment": {"confidence": 0.85},
+                "outcome": {"status": "pending"},  # no mutation-style override
+            },
+            {
+                "id": "vrd-2",
+                "subject": {"type": "outcome_resolution"},
+                "verdict_type": "outcome_resolution",
+                "parent_ids": ["vrd-1"],
+                "created_at": "2026-05-25T10:00:00+00:00",
+                "outcome_status": "confirmed",
+            },
+        ]
+        accuracy_records = _build_accuracy(chain)
+        # Only non-outcome verdicts appear in accuracy; the resolution itself doesn't.
+        target = [a for a in accuracy_records if a.verdict_id == "vrd-1"][0]
+        assert target.outcome_status == "confirmed"
+        assert target.override_by is None  # mutation-style fields stay None
+
+    def test_render_includes_override_section(self):
+        """When a verdict has mutation-style override attribution, the
+        rendered post-incident output includes an 'Overrides' section."""
+        review = PostIncidentReview(
+            case_id="case-1",
+            service="fraud-detect",
+            severity=2,
+            state="resolved",
+            duration_minutes=15,
+            accuracy=[
+                VerdictAccuracy(
+                    verdict_id="vrd-1",
+                    role="triage",
+                    confidence=0.85,
+                    outcome_status="overridden",
+                    override_by="operator-hash",
+                    override_at="2026-05-25T10:00:00+00:00",
+                    override_action="approve",
+                    override_reasoning="false positive",
+                    override_original_action="reject",
+                ),
+            ],
+        )
+        output = render_post_incident_review(review)
+        assert "## Overrides" in output  # section header rendered
+        assert "operator-hash" in output  # operator attribution surfaced
+        assert "false positive" in output  # reasoning surfaced
+        assert "reject → approve" in output  # action transition surfaced
+
+    def test_render_omits_override_section_when_no_overrides(self):
+        """No mutation-style override → no 'Overrides' header in the output."""
+        review = PostIncidentReview(
+            case_id="case-2",
+            service="fraud-detect",
+            severity=2,
+            state="resolved",
+            duration_minutes=15,
+            accuracy=[
+                VerdictAccuracy(
+                    verdict_id="vrd-1",
+                    role="triage",
+                    confidence=0.85,
+                    outcome_status="confirmed",
+                ),
+            ],
+        )
+        output = render_post_incident_review(review)
+        assert "Overrides" not in output  # no section when no overrides exist

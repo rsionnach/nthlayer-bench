@@ -47,15 +47,28 @@ class TimelineEntry:
 class VerdictAccuracy:
     """Accuracy record for a single verdict.
 
-    Built by matching outcome_resolution verdicts (which carry
-    ``parent_ids: [original_id]`` per core's immutable contract) back to
-    the original verdict they resolve.
+    outcome_status is populated from either pattern:
+    - lineage-style: latest outcome_resolution child verdict's status (existing behaviour)
+    - mutation-style: the original verdict's own outcome.status (opensrm-jmy.19)
+
+    When mutation-style outcome.status == "overridden", the override_*
+    fields below capture the operator attribution from outcome.override.
+    Both patterns coexist; the renderer surfaces both when both exist.
     """
 
     verdict_id: str
     role: str                  # original verdict's subject.type
     confidence: float | None   # original verdict's judgment.confidence
     outcome_status: str | None  # confirmed | overridden | partial | superseded | expired
+    # NEW (jmy.19) — populated only when the original verdict has been
+    # mutation-style overridden (outcome.status=="overridden" with a
+    # non-empty outcome.override). All-None for non-override outcomes
+    # and for lineage-style-only resolutions.
+    override_by: str | None = None
+    override_at: str | None = None
+    override_action: str | None = None
+    override_reasoning: str | None = None
+    override_original_action: str | None = None
 
 
 @dataclass
@@ -178,8 +191,17 @@ def _verdict_to_entry(v: dict) -> TimelineEntry:
 
 
 def _build_accuracy(chain: list[dict]) -> list[VerdictAccuracy]:
-    """For each non-outcome verdict, match it to an outcome_resolution
-    verdict (if any) and emit a VerdictAccuracy.
+    """For each non-outcome verdict, emit a VerdictAccuracy combining:
+
+    - lineage-style: latest outcome_resolution child status (existing)
+    - mutation-style: the original verdict's outcome.status and
+      outcome.override fields (jmy.19)
+
+    When both signals exist for the same verdict, both are surfaced
+    via outcome_status and the override_* fields respectively.
+    Mutation-style takes precedence for outcome_status when no lineage
+    child exists (mirrors the spec § 2 contract that the original is
+    authoritative for operator-imposed amendments).
 
     Outcome resolutions carry ``parent_ids: [original_id]`` per core's
     immutable verdict contract. Multiple outcome resolutions for the
@@ -207,12 +229,36 @@ def _build_accuracy(chain: list[dict]) -> list[VerdictAccuracy]:
         original_id = v.get("id", "")
         if not original_id:
             continue
+
+        # Lineage-style outcome_status (existing behaviour).
         outcome = outcomes_for.get(original_id)
         outcome_status = None
         if outcome is not None:
             outcome_status = outcome.get("outcome_status") or (
                 (outcome.get("outcome") or {}).get("status")
             )
+
+        # Mutation-style outcome.status + outcome.override (jmy.19).
+        # The original verdict's outcome dict may carry status="overridden"
+        # and a populated override dict. Read defensively — both paths
+        # tolerate missing/malformed payloads.
+        own_outcome = v.get("outcome") or {}
+        own_status = own_outcome.get("status")
+        override = own_outcome.get("override") or {}
+        override_by = override.get("by") if override else None
+        override_at = override.get("at") if override else None
+        override_action = override.get("action") if override else None
+        override_reasoning = override.get("reasoning") if override else None
+        override_original_action = override.get("original_action") if override else None
+
+        # If we have a mutation-style "overridden" status and no lineage
+        # outcome to override it, surface the mutation status. (When both
+        # exist, the lineage child wins for outcome_status — preserves
+        # existing semantics — but the override_* fields are populated
+        # either way so the renderer can show both.)
+        if outcome_status is None and own_status == "overridden" and override_by:
+            outcome_status = "overridden"
+
         judgment = v.get("judgment") or {}
         accuracy.append(
             VerdictAccuracy(
@@ -220,6 +266,11 @@ def _build_accuracy(chain: list[dict]) -> list[VerdictAccuracy]:
                 role=(v.get("subject") or {}).get("type", ""),
                 confidence=judgment.get("confidence"),
                 outcome_status=outcome_status,
+                override_by=override_by,
+                override_at=override_at,
+                override_action=override_action,
+                override_reasoning=override_reasoning,
+                override_original_action=override_original_action,
             )
         )
     return accuracy
@@ -418,5 +469,28 @@ def render_post_incident_review(review: PostIncidentReview) -> str:
             )
     else:
         lines.append("- (no verdicts to score)")
+
+    # Overrides section — rendered only when at least one VerdictAccuracy
+    # carries mutation-style override attribution (jmy.19). Omit the header
+    # entirely when no overrides exist so operators reading the plain-text
+    # output don't see a dangling empty section.
+    override_records = [a for a in review.accuracy if a.override_by]
+    if override_records:
+        lines.append("")
+        lines.append("## Overrides")
+        for record in override_records:
+            at_part = f" at {record.override_at}" if record.override_at else ""
+            reason_part = (
+                f" — {record.override_reasoning}" if record.override_reasoning else ""
+            )
+            action_part = (
+                f"; was {record.override_original_action} → {record.override_action}"
+                if record.override_original_action and record.override_action
+                else ""
+            )
+            lines.append(
+                f"- {record.role} (`{record.verdict_id}`): "
+                f"overridden by {record.override_by}{at_part}{reason_part}{action_part}"
+            )
 
     return "\n".join(lines)
