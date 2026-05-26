@@ -197,10 +197,11 @@ def _build_accuracy(chain: list[dict]) -> list[VerdictAccuracy]:
     - mutation-style: the original verdict's outcome.status and
       outcome.override fields (jmy.19)
 
-    When both signals exist for the same verdict, both are surfaced
-    via outcome_status and the override_* fields respectively.
-    Mutation-style takes precedence for outcome_status when no lineage
-    child exists (mirrors the spec § 2 contract that the original is
+    When both signals exist for the same verdict, both are surfaced:
+    the lineage child wins for outcome_status; the override_* fields
+    are populated from outcome.override regardless. When only the
+    mutation-style signal exists, it fills in outcome_status as a
+    fallback (mirrors the spec § 2 contract that the original is
     authoritative for operator-imposed amendments).
 
     Outcome resolutions carry ``parent_ids: [original_id]`` per core's
@@ -240,22 +241,22 @@ def _build_accuracy(chain: list[dict]) -> list[VerdictAccuracy]:
 
         # Mutation-style outcome.status + outcome.override (jmy.19).
         # The original verdict's outcome dict may carry status="overridden"
-        # and a populated override dict. Read defensively — both paths
-        # tolerate missing/malformed payloads.
+        # and a populated override dict. The `or {}` falls absent/None
+        # outcome and override blobs through to an empty dict so the
+        # downstream `.get()` calls return None natively.
         own_outcome = v.get("outcome") or {}
         own_status = own_outcome.get("status")
         override = own_outcome.get("override") or {}
-        override_by = override.get("by") if override else None
-        override_at = override.get("at") if override else None
-        override_action = override.get("action") if override else None
-        override_reasoning = override.get("reasoning") if override else None
-        override_original_action = override.get("original_action") if override else None
+        override_by = override.get("by")
+        override_at = override.get("at")
+        override_action = override.get("action")
+        override_reasoning = override.get("reasoning")
+        override_original_action = override.get("original_action")
 
-        # If we have a mutation-style "overridden" status and no lineage
-        # outcome to override it, surface the mutation status. (When both
-        # exist, the lineage child wins for outcome_status — preserves
-        # existing semantics — but the override_* fields are populated
-        # either way so the renderer can show both.)
+        # Mutation-style fallback: when there's no lineage outcome child,
+        # promote outcome.status="overridden" to outcome_status — but only
+        # if override.by is also set (empty override dict = malformed
+        # payload, not a real override; spec § 2 contract).
         if outcome_status is None and own_status == "overridden" and override_by:
             outcome_status = "overridden"
 
