@@ -849,3 +849,88 @@ class TestMutationStyleOverride:
         )
         output = render_post_incident_review(review)
         assert "Overrides" not in output  # no section when no overrides exist
+
+    def test_build_accuracy_lineage_wins_when_both_present(self):
+        """Lineage child sets outcome_status; mutation override_* still populated."""
+        chain = [
+            {
+                "id": "vrd-1",
+                "subject": {"type": "triage"},
+                "judgment": {"confidence": 0.85},
+                "outcome": {
+                    "status": "overridden",
+                    "override": {
+                        "by": "operator-hash",
+                        "at": "2026-05-25T10:00:00+00:00",
+                        "action": "approve",
+                        "reasoning": "false positive",
+                        "original_action": "reject",
+                    },
+                },
+            },
+            {
+                "id": "vrd-2",
+                "subject": {"type": "outcome_resolution"},
+                "verdict_type": "outcome_resolution",
+                "parent_ids": ["vrd-1"],
+                "created_at": "2026-05-25T11:00:00+00:00",
+                "outcome_status": "confirmed",
+            },
+        ]
+        a = [r for r in _build_accuracy(chain) if r.verdict_id == "vrd-1"][0]
+        # Lineage wins for outcome_status.
+        assert a.outcome_status == "confirmed"
+        # Override_* still populated from the mutation-style data.
+        assert a.override_by == "operator-hash"
+        assert a.override_reasoning == "false positive"
+
+    def test_render_multiple_overrides_preserves_accuracy_order(self):
+        """Multiple verdicts with overrides render in review.accuracy order."""
+        review = PostIncidentReview(
+            case_id="case-3",
+            service="fraud-detect",
+            severity=2,
+            state="resolved",
+            duration_minutes=15,
+            accuracy=[
+                VerdictAccuracy(
+                    verdict_id="vrd-A", role="triage", confidence=0.85,
+                    outcome_status="overridden",
+                    override_by="alice", override_at="2026-05-25T10:00:00+00:00",
+                    override_action="approve",
+                ),
+                VerdictAccuracy(
+                    verdict_id="vrd-B", role="remediation", confidence=0.91,
+                    outcome_status="overridden",
+                    override_by="bob", override_at="2026-05-25T10:05:00+00:00",
+                    override_action="rollback",
+                ),
+            ],
+        )
+        output = render_post_incident_review(review)
+        # alice line precedes bob line — order matches accuracy order.
+        assert output.index("alice") < output.index("bob")
+
+    def test_render_empty_role_with_override_does_not_crash(self):
+        """A verdict with empty role but populated override renders without raising."""
+        review = PostIncidentReview(
+            case_id="case-4",
+            service="fraud-detect",
+            severity=2,
+            state="resolved",
+            duration_minutes=15,
+            accuracy=[
+                VerdictAccuracy(
+                    verdict_id="vrd-empty-role",
+                    role="",  # degenerate
+                    confidence=0.85,
+                    outcome_status="overridden",
+                    override_by="operator-hash",
+                    override_at="2026-05-25T10:00:00+00:00",
+                ),
+            ],
+        )
+        # Must not raise.
+        output = render_post_incident_review(review)
+        assert "operator-hash" in output
+        assert "vrd-empty-role" in output
