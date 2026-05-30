@@ -3,6 +3,8 @@
 import argparse
 import sys
 
+from nthlayer_bench import __version__
+
 # Characters that change a URL's path/query/fragment if interpolated as
 # a path segment — reject at the CLI boundary so we don't reshape the
 # request to core. The right longer-term fix lives in CoreAPIClient
@@ -35,7 +37,7 @@ def _validate_case_id(raw: str | None) -> str | None:
 
 def main():
     parser = argparse.ArgumentParser(description="NthLayer Bench — operator TUI")
-    parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.5.0")
+    parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--core-url", default="http://localhost:8000",
                         help="Core API URL (default: http://localhost:8000)")
     parser.add_argument("--case-id", default=None,

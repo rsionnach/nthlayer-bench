@@ -16,6 +16,7 @@ from textual.widgets import Footer, Header, Static
 
 from nthlayer_common.api_client import CoreAPIClient
 
+from nthlayer_bench import __version__
 from nthlayer_bench.sre.escalation import EscalationEvent, EscalationMonitor
 from nthlayer_bench.sre.write_queue import WriteQueue
 
@@ -215,7 +216,7 @@ class BenchApp(App):
             id="status-bar",
         )
         yield Container(
-            Static("NthLayer Bench v1.5.0\n\nPhase 4 screens coming soon: Situation Board, Case Bench, Case Detail"),
+            Static(f"NthLayer Bench v{__version__}\n\nPhase 4 screens coming soon: Situation Board, Case Bench, Case Detail"),
             id="main",
         )
         yield Footer()

@@ -4,3 +4,7 @@ Textual-based terminal UI for case management, situation board,
 and system health monitoring. Communicates with nthlayer-core
 exclusively via HTTP API.
 """
+
+from importlib.metadata import version
+
+__version__ = version("nthlayer-bench")
