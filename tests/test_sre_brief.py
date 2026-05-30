@@ -16,7 +16,6 @@ from nthlayer_common.api_client import APIResult, CoreAPIClient
 
 from nthlayer_bench.sre.brief import (
     AnchorVerdictMissingError,
-    BriefError,
     CaseNotFoundError,
     CoreUnreachableError,
     PagingBrief,

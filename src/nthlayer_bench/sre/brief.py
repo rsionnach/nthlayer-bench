@@ -12,7 +12,7 @@ Spec: ``docs/superpowers/specs/2026-04-28-p4-bench-brief-design.md``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Literal
 
 from nthlayer_common.api_client import CoreAPIClient
 

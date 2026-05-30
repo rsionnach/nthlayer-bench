@@ -233,7 +233,7 @@ class TestBenchApp:
         app = BenchApp(core_url="http://test:8000")
 
         with _empty_case_bench():
-            async with app.run_test() as pilot:
+            async with app.run_test():
                 # Touch the property so the lazy client gets instantiated.
                 client = app.client
                 assert isinstance(client, CoreAPIClient)

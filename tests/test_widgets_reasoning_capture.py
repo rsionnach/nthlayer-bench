@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from textual.app import App, ComposeResult
-from textual.widgets import Input, Label, Static
+from textual.widgets import Input, Static
 
 from nthlayer_bench.sre.reasoning_capture import (
     CaseNotFoundError,
