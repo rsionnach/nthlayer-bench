@@ -6,6 +6,28 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## [1.7.0](https://github.com/rsionnach/nthlayer-bench/compare/v1.6.0...v1.7.0) (2026-06-01)
+
+
+### Features
+
+* **post_incident:** surface mutation-style override attribution · opensrm-jmy.19 ([65ba2bc](https://github.com/rsionnach/nthlayer-bench/commit/65ba2bcd12a8600cbfe982323907bb301962ba2d))
+
+
+### Bug Fixes
+
+* **ci:** add tag-push + workflow_dispatch triggers to release.yml ([dbf2d39](https://github.com/rsionnach/nthlayer-bench/commit/dbf2d3974f63a6494632723a6b74e8a7f6e0cd5c))
+
+
+### Code Refactoring
+
+* read version from importlib.metadata, not source literals ([5bf10a8](https://github.com/rsionnach/nthlayer-bench/commit/5bf10a8de1161ca68376612bbca479d0889e7fbe))
+
+
+### Documentation
+
+* **CLAUDE.md:** catch up auto-memory drift from prior bead sessions ([d7a5817](https://github.com/rsionnach/nthlayer-bench/commit/d7a58170c6235c9bef2d79699172755d059adada))
+
 ## [1.6.0](https://github.com/rsionnach/nthlayer-bench/compare/v1.5.0...v1.6.0) (2026-05-10)
 
 
