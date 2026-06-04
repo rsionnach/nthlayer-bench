@@ -10,3 +10,6 @@ dist/
 # Beads task tracking (centralized in opensrm Dolt DB)
 .beads/
 .beads.archived/
+
+# Local backups created by the auto-memory retirement plan (2026-06-04)
+*.bak
