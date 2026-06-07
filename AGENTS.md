@@ -27,6 +27,8 @@ nthlayer-bench --core-url http://localhost:8000        # start the TUI
 nthlayer-bench --case-id <id> --core-url <url>         # deep-link to a case
 ```
 
+Ecosystem testing conventions: [../nthlayer/docs/testing.md](../nthlayer/docs/testing.md).
+
 ## CI / release
 
 - Pilot repo for `googleapis/release-please-action@v4`. Push to `main`
