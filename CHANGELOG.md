@@ -6,6 +6,14 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## [1.7.1](https://github.com/rsionnach/nthlayer-bench/compare/v1.7.0...v1.7.1) (2026-06-20)
+
+
+### Documentation
+
+* link to ecosystem testing conventions (opensrm-2wkc) ([0d2f08e](https://github.com/rsionnach/nthlayer-bench/commit/0d2f08ef73ab495336d7bdb398d13207bb7017e8))
+* thin CLAUDE.md; move detail to AGENTS.md + docs/ ([7301b57](https://github.com/rsionnach/nthlayer-bench/commit/7301b573de6221c431c77b366cba1b7382b6e395))
+
 ## [1.7.0](https://github.com/rsionnach/nthlayer-bench/compare/v1.6.0...v1.7.0) (2026-06-01)
 
 
