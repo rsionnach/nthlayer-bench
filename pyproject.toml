@@ -9,7 +9,12 @@ description = "NthLayer Bench — Tier 3 operator TUI for case management and si
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "nthlayer-common>=1.5.0,<2.0.0",
+    # Floor is the version this repo is built and tested against, NOT the
+    # oldest one that happens to import. Guarded by
+    # tests/test_dependency_declarations.py and
+    # tests/smoke/test_resolved_dependencies.py; see CLAUDE.md hard rule 11
+    # for why both are needed [opensrm-p3bm].
+    "nthlayer-common>=2.1.2,<3.0.0",
     "textual>=1.0",
     "httpx>=0.27",
 ]
@@ -17,6 +22,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.2",
+    # Imported directly by the two dependency guards, so declared rather than
+    # leaned on as pytest's transitive dep [opensrm-p3bm].
+    "packaging>=22",
     "pytest-asyncio>=0.23",
     "ruff>=0.8",
 ]

@@ -874,7 +874,7 @@ wheels = [
 
 [[package]]
 name = "nthlayer-bench"
-version = "1.6.0"
+version = "1.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
@@ -884,6 +884,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "packaging" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -893,6 +894,7 @@ dev = [
 requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "nthlayer-common", editable = "../nthlayer-common" },
+    { name = "packaging", marker = "extra == 'dev'", specifier = ">=22" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
@@ -902,7 +904,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "nthlayer-common"
-version = "1.6.0"
+version = "2.1.2"
 source = { editable = "../nthlayer-common" }
 dependencies = [
     { name = "anthropic" },
@@ -928,6 +930,7 @@ requires-dist = [
     { name = "circuitbreaker", specifier = ">=2.0.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "instructor", specifier = ">=1.5" },
+    { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.21" },
     { name = "openai", specifier = ">=1.50" },
     { name = "opentelemetry-api", specifier = ">=1.28" },
     { name = "pagerduty", specifier = ">=6.0.0,<7.0.0" },
