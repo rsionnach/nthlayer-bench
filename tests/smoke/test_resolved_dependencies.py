@@ -110,10 +110,10 @@ def test_every_discovered_sibling_declares_a_major(name):
 
 @pytest.mark.parametrize("name", SIBLINGS)
 def test_installed_version_satisfies_the_artifact_metadata(name):
-    """Catches a stale build, which is how it earned its keep during opensrm-p3bm.
+    """Catches a stale build: dist-info metadata that predates a pyproject edit.
 
-    Editing pyproject.toml and re-locking without re-syncing leaves the
-    installed dist-info carrying the old range. This test is what said so.
+    Re-locking without re-syncing leaves the installed metadata carrying the old
+    range, which this notices and the pyproject-reading guard cannot.
     """
     declared = _sibling_requirements()
     assert name in declared, (
@@ -128,7 +128,7 @@ def test_installed_sibling_is_the_major_this_code_was_written_against(name):
     """The assertion the container gate was missing.
 
     Decisive in the release container, where deps come from PyPI: a successful
-    `pip install nthlayer_core-*.whl` says only that the declared range is
+    `pip install nthlayer_bench-*.whl` says only that the declared range is
     satisfiable, not that it is right. Pinning the expected MAJOR here
     — and nothing narrower — is what distinguishes "a version was installed"
     from "the version this code was developed and tested against was

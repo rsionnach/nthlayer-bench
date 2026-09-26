@@ -5,7 +5,7 @@ sibling outgrows the declared range. Its counterpart
 tests/smoke/test_resolved_dependencies.py reads the BUILT artifact's metadata
 instead and is decisive in the release container.
 
-The full account of why both exist is nthlayer-bench CLAUDE.md hard rule 10
+The full account of why both exist is nthlayer-bench CLAUDE.md hard rule 11
 [opensrm-p3bm]. The short version: `tool.uv.sources` points nthlayer-common at
 the sibling checkout, a path source REPLACES registry resolution rather than
 being filtered by the version specifier, and nothing warned that the declared
@@ -159,12 +159,12 @@ def test_declared_floor_is_the_version_under_test(name):
     the same hole as `>=1.5.0`, one coordinate smaller.
 
     Where the red actually appears, which is not where you would guess:
-    .github/workflows/ci.yml checks out rsionnach/nthlayer-common with no `ref`,
-    so CI builds against that repo's floating main. This test therefore goes red
-    when common's version-bump commit lands on ITS main — before any PyPI
-    release, triggered by a commit in another repository. If you are debugging
-    that failure from inside nthlayer-core, the change you are looking for is
-    not here.
+    .github/workflows/test.yml checks out rsionnach/nthlayer-common with no
+    `ref`, so CI builds against that repo's floating main. This test therefore
+    goes red on every lane of the version matrix when common's version-bump
+    commit lands on ITS main — before any PyPI release, triggered by a commit in
+    another repository. If you are debugging that failure from inside this repo,
+    the change you are looking for is not here.
     """
     specifier = _siblings()[name].specifier
     installed = version(name)
@@ -188,7 +188,7 @@ def test_declared_floor_is_the_version_under_test(name):
 
 @pytest.mark.parametrize("name", SIBLINGS)
 def test_declared_range_has_an_upper_bound(name):
-    """A missing ceiling is how core 1.0.0 became the resolver's escape hatch.
+    """A missing ceiling is how 1.0.0 becomes the resolver's escape hatch.
 
     Without an upper bound, a future major of the sibling is silently
     considered compatible, and this package becomes the one the resolver

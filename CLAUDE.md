@@ -89,9 +89,11 @@ operator work.
     declared range — that makes the test agree with a wrong range. This repo
     shipped `nthlayer-common>=1.5.0,<2.0.0` while testing 2.1.2; the guards
     are copies of nthlayer-core's, deliberately duplicated rather than
-    extracted, because a helper imported from the package whose range you are
-    guarding fails by ImportError exactly when the range is wrong
-    [opensrm-p3bm].
+    extracted: the smoke guard runs in a release container holding only the
+    wheel, pytest and packaging, so a helper living in any sibling repo is
+    simply absent there. Sharing it would mean publishing a ninth distribution
+    and making it a runtime dependency of three wheels — more surface than the
+    duplication costs [opensrm-p3bm].
 
 ## Where to find detail
 
