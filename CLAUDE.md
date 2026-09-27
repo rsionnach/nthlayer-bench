@@ -77,6 +77,24 @@ operator work.
     real regressions. Same rule as the rest of the ecosystem
     (see `feedback_test_assertions`).
 
+11. **A declared dependency range must admit exactly the versions tested.**
+    Not the oldest that imports, not a future major. The floor equals the
+    installed sibling and there is always a ceiling — anything wider publishes
+    support for versions nothing here has run. Enforced by two guards that
+    read deliberately different things:
+    `tests/test_dependency_declarations.py` reads `pyproject.toml` and fails
+    locally; `tests/smoke/test_resolved_dependencies.py` reads the BUILT
+    artifact's metadata and is decisive in the release container, where
+    dependencies resolve from PyPI. Do not derive the expected major from the
+    declared range — that makes the test agree with a wrong range. This repo
+    shipped `nthlayer-common>=1.5.0,<2.0.0` while testing 2.1.2; the guards
+    are copies of nthlayer-core's, deliberately duplicated rather than
+    extracted: the smoke guard runs in a release container holding only the
+    wheel, pytest and packaging, so a helper living in any sibling repo is
+    simply absent there. Sharing it would mean publishing a ninth distribution
+    and making it a runtime dependency of three wheels — more surface than the
+    duplication costs [opensrm-p3bm].
+
 ## Where to find detail
 
 - Source layout, per-feature design decisions, test-suite
