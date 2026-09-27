@@ -82,9 +82,10 @@ SIBLINGS = sorted(_sibling_requirements())
 def test_at_least_one_sibling_was_discovered():
     """Non-vacuity floor. An empty parametrise list is `1 skipped`, exit 0.
 
-    Measured, not assumed. This repo has shipped two bugs behind a test that
-    passed by never running, so the guard against silent drift must not be able
-    to go silent. If this fails, the artifact's metadata lost its sibling
+    Measured, not assumed. Two bugs elsewhere in this workspace shipped behind
+    a test that passed by never running — nthlayer-common's archetype suite and
+    nthlayer-workers' test_manifest_v2_archetypes.py, neither of them here — so
+    a guard against silent drift must not be able to go silent itself. If this fails, the artifact's metadata lost its sibling
     requirements — a packaging fault, not a version fault.
     """
     assert SIBLINGS, (
