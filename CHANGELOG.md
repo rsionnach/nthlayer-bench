@@ -6,6 +6,23 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## [1.7.1](https://github.com/rsionnach/nthlayer-bench/compare/v1.7.0...v1.7.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* declare the nthlayer-common range this repo is actually tested against ([deb4b3e](https://github.com/rsionnach/nthlayer-bench/commit/deb4b3ee96b561c9c2248ecc246a33dce92ef5df))
+* declare the nthlayer-common range this repo is actually tested against (opensrm-p3bm) ([d526936](https://github.com/rsionnach/nthlayer-bench/commit/d52693644657dd8476f88b7624a846eb00d272a5))
+
+
+### Documentation
+
+* add contributing guide (opensrm-tu04.4) ([16d89bf](https://github.com/rsionnach/nthlayer-bench/commit/16d89bfeeeb885b0fd251eceae9e1f7ef5433aaf))
+* link to ecosystem testing conventions (opensrm-2wkc) ([0d2f08e](https://github.com/rsionnach/nthlayer-bench/commit/0d2f08ef73ab495336d7bdb398d13207bb7017e8))
+* **tests:** attribute the silent-skip precedent to the repos it happened in ([5f471f6](https://github.com/rsionnach/nthlayer-bench/commit/5f471f693ae5fdb574592e89207623e3558e3e18))
+* **tests:** attribute the silent-skip precedent to the repos it happened in ([ae28cd3](https://github.com/rsionnach/nthlayer-bench/commit/ae28cd38ba7aa29374ad370f90922b1eabddfd4e))
+* thin CLAUDE.md; move detail to AGENTS.md + docs/ ([7301b57](https://github.com/rsionnach/nthlayer-bench/commit/7301b573de6221c431c77b366cba1b7382b6e395))
+
 ## [1.7.0](https://github.com/rsionnach/nthlayer-bench/compare/v1.6.0...v1.7.0) (2026-06-01)
 
 
