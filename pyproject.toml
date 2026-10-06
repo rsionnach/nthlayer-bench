@@ -14,7 +14,7 @@ dependencies = [
     # tests/test_dependency_declarations.py and
     # tests/smoke/test_resolved_dependencies.py; see CLAUDE.md hard rule 11
     # for why both are needed [opensrm-p3bm].
-    "nthlayer-common>=2.1.2,<3.0.0",
+    "nthlayer-common>=3.0.0,<4.0.0",
     "textual>=1.0",
     "httpx>=0.27",
 ]
