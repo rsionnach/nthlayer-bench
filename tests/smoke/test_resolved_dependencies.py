@@ -43,7 +43,7 @@ FRONT_DOOR = "nthlayer"
 # fails if a sibling appears in the metadata without an entry here — so adding a
 # dependency forces someone to state its expected major rather than quietly
 # leaving it unguarded.
-EXPECTED_MAJORS = {"nthlayer-common": 4}
+EXPECTED_MAJORS = {"nthlayer-common": 5}
 
 
 def _sibling_requirements() -> dict[str, Requirement]:

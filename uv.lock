@@ -874,7 +874,7 @@ wheels = [
 
 [[package]]
 name = "nthlayer-bench"
-version = "1.7.2"
+version = "1.7.3"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
@@ -904,7 +904,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "nthlayer-common"
-version = "4.0.0"
+version = "5.0.0"
 source = { editable = "../nthlayer-common" }
 dependencies = [
     { name = "anthropic" },
