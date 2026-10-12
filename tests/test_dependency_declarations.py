@@ -242,8 +242,9 @@ def test_declared_ceiling_is_exactly_the_next_major(name):
     """The ceiling must exclude the first release of the NEXT major, and nothing more.
 
     test_declared_range_has_an_upper_bound only asks that SOME bound exists, so
-    `<6.0.0` while 4.x is under test passes it (measured: suite stays green) and
-    admits all of major 5, which nothing here has run. Mirror image of the floor
+    a ceiling two majors up (`<N+2.0.0` while N.x is under test) passes it
+    (measured: suite stays green) and admits all of major N+1, which nothing
+    here has run. Mirror image of the floor
     test: the floor admits nothing below the tested version, this admits nothing
     above its major. Like the floor, it must be bumped deliberately when the
     sibling's major advances.
