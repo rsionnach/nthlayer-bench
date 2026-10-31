@@ -7,6 +7,7 @@ name = "nthlayer-bench"
 version = "1.7.11"
 description = "NthLayer Bench — Tier 3 operator TUI for case management and situation awareness"
 readme = "README.md"
+license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
 dependencies = [
     # Floor is the version this repo is built and tested against, NOT the
