@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nthlayer-bench"
-version = "1.7.12"
+version = "1.7.13"
 description = "NthLayer Bench — Tier 3 operator TUI for case management and situation awareness"
 readme = "README.md"
 license = {text = "Apache-2.0"}
