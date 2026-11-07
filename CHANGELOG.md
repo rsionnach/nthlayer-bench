@@ -12,7 +12,6 @@ was being done. This narrative is the honest substitute.
 ### Bug Fixes
 
 * require nthlayer-common 5.12.0 ([db45768](https://github.com/rsionnach/nthlayer-bench/commit/db45768fab7484d3f5ecce659862d2f18f0fa6a3))
-* require nthlayer-common 5.12.0 ([a7b225c](https://github.com/rsionnach/nthlayer-bench/commit/a7b225c2d4a11e9bc1f13984a2f8266f92b61ed3))
 
 ## [1.7.18](https://github.com/rsionnach/nthlayer-bench/compare/v1.7.17...v1.7.18) (2026-11-02)
 
